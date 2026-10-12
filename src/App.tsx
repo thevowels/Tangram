@@ -8,7 +8,7 @@ import { JointTip } from "./components/Tip";
 import { exportBoardImage } from "./exportImage";
 import { puzzleIdFromUrl, puzzleLink, SITE_URL } from "./site";
 import { flip, rotate } from "./game/actions";
-import { centreOn, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
+import { centreOn, evaluate, perfectFit, settleFlush, slotSnap, type Puzzle } from "./game/check";
 import {
   figureExtent,
   fitLayout,
@@ -78,6 +78,8 @@ function usePieces(
   onSettle: (p: PieceState[]) => void,
   puzzle: boolean,
   outline?: Poly[],
+  /** The puzzle's exact spots: a piece turned the right way near its spot pulls in. */
+  slots?: PieceState[],
 ) {
   // the physics board: the screen-fitted size plus, in puzzles, the silhouette pieces lock to
   const board = useMemo(() => (layout ? { ...layout.board, outline } : null), [layout, outline]);
@@ -106,18 +108,18 @@ function usePieces(
     (ids: string[], dir: 1 | -1) => {
       if (!ids.length || !piecesRef.current || !board) return;
       const next = rotate(piecesRef.current, ids, dir, board);
-      if (next) settle(next);
+      if (next) settle((slots && slotSnap(next, ids, slots)?.pieces) || next);
     },
-    [settle, board],
+    [settle, board, slots],
   );
 
   const doFlip = useCallback(
     (ids: string[]) => {
       if (!ids.length || !piecesRef.current || !board) return;
       const next = flip(piecesRef.current, ids, board);
-      if (next) settle(next);
+      if (next) settle((slots && slotSnap(next, ids, slots)?.pieces) || next);
     },
-    [settle, board],
+    [settle, board, slots],
   );
 
   useEffect(() => {
@@ -143,6 +145,7 @@ function usePieces(
       ? {
           board,
           pieces,
+          slots,
           selected,
           onSelect: setSelected,
           onChange: setPieces,
@@ -296,7 +299,12 @@ function PuzzlePlay({
     [guide, onSolved, puzzle, layout],
   );
 
-  const g = usePieces(layout, trayLayout, check, true, guide ?? undefined);
+  const slots = useMemo(
+    () =>
+      layout ? puzzle.solution.map((s) => ({ ...s, x: s.x + layout.target[0], y: s.y + layout.target[1] })) : undefined,
+    [puzzle, layout],
+  );
+  const g = usePieces(layout, trayLayout, check, true, guide ?? undefined, slots);
   replacePieces.current = g.replace;
   const pct = Math.round(match * 100);
 

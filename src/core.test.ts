@@ -3,7 +3,7 @@ import { PIECES, piecePolygon, pieceTransform, squareLayout, type PieceState } f
 import { area, bounds, cornerJoints, groupCentroid, mtv, sharedEdges, type Poly } from "./geometry/polygon";
 import { findSnap } from "./geometry/snap";
 import { groupOf, hasOverlap, isLocked, moveWithPush, transformWithPush } from "./physics/resolve";
-import { centreOn, coverage, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
+import { centreOn, coverage, evaluate, perfectFit, settleFlush, slotSnap, type Puzzle } from "./game/check";
 import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
@@ -420,5 +420,74 @@ describe("solving clicks every piece into its exact place", () => {
     const settled = settleFlush(gapped, []);
     const [a, b] = settled.map(piecePolygon);
     expect(cornerJoints(a, b).length).toBeGreaterThan(0);
+  });
+});
+
+describe("pieces pull into their exact spot when close", () => {
+  const fox = puzzles.find((q) => q.name === "Fox")!;
+  const at: [number, number] = [6, 5];
+  const slots = fox.solution.map((s) => ({ ...s, x: s.x + at[0], y: s.y + at[1] }));
+  const slot = (id: string) => slots.find((s) => s.id === id)!;
+
+  it("a correctly turned piece a little off its spot pulls in exactly", () => {
+    const sq = { ...slot("SQ"), x: slot("SQ").x + 0.15, y: slot("SQ").y - 0.1 }; // ~0.18 off
+    const r = slotSnap([sq], ["SQ"], slots)!;
+    expect(r).not.toBeNull();
+    expect(r.pieces[0].x).toBeCloseTo(slot("SQ").x, 9);
+    expect(r.pieces[0].y).toBeCloseTo(slot("SQ").y, 9);
+  });
+
+  it("too far away: no pull", () => {
+    const sq = { ...slot("SQ"), x: slot("SQ").x + 0.4 }; // beyond SLOT_SNAP_DISTANCE (0.25)
+    expect(slotSnap([sq], ["SQ"], slots)).toBeNull();
+  });
+
+  it("turned the wrong way: no pull", () => {
+    const pa = { ...slot("PA"), x: slot("PA").x + 0.1, rot: (slot("PA").rot + 90) % 360 };
+    expect(slotSnap([pa], ["PA"], slots)).toBeNull();
+  });
+
+  it("a spot that's already taken stays put", () => {
+    const placed = slot("SQ");
+    // the other square can't exist, so use the two small triangles: S1 sits in its spot already
+    const s1 = slot("S1");
+    const s2 = { ...s1, id: "S2" as const, x: s1.x + 0.15 }; // same outline, near the taken spot
+    const s2Shape = piecePolygon(s2);
+    expect(s2Shape.length).toBe(3);
+    const r = slotSnap([placed, s1, s2], ["S2"], slots);
+    // S2 may only go to the *other* small-triangle spot, which is far away: no pull
+    expect(r).toBeNull();
+  });
+
+  it("the identical large triangles can take each other's spot", () => {
+    // L2 turned to have exactly L1-spot's outline, slightly off
+    const target = slot("L1");
+    let l2: PieceState | null = null;
+    for (const flipped of [false, true])
+      for (let rot = 0; rot < 360 && !l2; rot += 45) {
+        const c = { ...target, id: "L2", rot, flipped };
+        const key = (st: PieceState) =>
+          piecePolygon(st)
+            .map(([x, y]) => `${(Math.round((x - st.x) * 1e5) / 1e5 + 0).toFixed(5)},${(Math.round((y - st.y) * 1e5) / 1e5 + 0).toFixed(5)}`)
+            .sort()
+            .join(" ");
+        if (key(c) === key(target)) l2 = c;
+      }
+    const near = { ...l2!, x: target.x - 0.15, y: target.y + 0.1 };
+    const r = slotSnap([near], ["L2"], slots)!;
+    expect(r).not.toBeNull();
+    expect(r.pieces[0].x).toBeCloseTo(target.x, 9);
+    expect(r.pieces[0].y).toBeCloseTo(target.y, 9);
+  });
+
+  it("a joined group pulls in as one when every member fits", () => {
+    const ids = ["S1", "S2", "M"]; // the fox's ears and head
+    const group = ids.map((id) => ({ ...slot(id), x: slot(id).x + 0.15, y: slot(id).y + 0.05 }));
+    const r = slotSnap(group, ids, slots)!;
+    expect(r).not.toBeNull();
+    r.pieces.forEach((p) => {
+      expect(p.x).toBeCloseTo(slot(p.id).x, 9);
+      expect(p.y).toBeCloseTo(slot(p.id).y, 9);
+    });
   });
 });

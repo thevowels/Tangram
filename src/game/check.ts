@@ -174,3 +174,54 @@ export function centreOn(pieces: PieceState[], at: [number, number]): PieceState
   const [cx, cy] = groupCentroid(pieces.map(piecePolygon));
   return pieces.map((p) => ({ ...p, x: p.x + at[0] - cx, y: p.y + at[1] - cy }));
 }
+
+/** How close (centre to centre, tan units) a correctly turned piece must be to pull into its spot. */
+export const SLOT_SNAP_DISTANCE = 0.25;
+
+/**
+ * Pull dropped (or just turned) pieces exactly into their spot on the outline: when a piece has
+ * the same outline as one of the solution's spots (`slots`, already placed on the board) and
+ * sits within `maxDist` of it, move it there. A joined group moves by one shared offset, and
+ * only if every member then sits exactly on a free spot. Never creates overlaps.
+ */
+export function slotSnap(
+  pieces: PieceState[],
+  ids: string[],
+  slots: PieceState[],
+  maxDist = SLOT_SNAP_DISTANCE,
+): { pieces: PieceState[]; at: [number, number] } | null {
+  const moving = pieces.filter((p) => ids.includes(p.id));
+  if (!moving.length) return null;
+  const others = pieces.filter((p) => !ids.includes(p.id)).map(piecePolygon);
+  const fits = (p: PieceState, s: PieceState) =>
+    PIECE_BY_ID[s.id].kind === PIECE_BY_ID[p.id].kind && sameShape(shapeKey(p), shapeKey(s));
+
+  // candidate shifts: any member onto any matching spot nearby
+  const shifts: { dx: number; dy: number; d: number }[] = [];
+  for (const p of moving) {
+    for (const s of slots) {
+      const d = Math.hypot(s.x - p.x, s.y - p.y);
+      if (d > 1e-9 && d <= maxDist && fits(p, s)) shifts.push({ dx: s.x - p.x, dy: s.y - p.y, d });
+    }
+  }
+  shifts.sort((a, b) => a.d - b.d);
+
+  for (const { dx, dy } of shifts) {
+    const moved = moving.map((p) => ({ ...p, x: p.x + dx, y: p.y + dy }));
+    // every member must land exactly on its own matching spot
+    const used = new Set<number>();
+    const ok = moved.every((p) => {
+      const i = slots.findIndex((s, j) => !used.has(j) && Math.hypot(s.x - p.x, s.y - p.y) < 1e-6 && fits(p, s));
+      if (i < 0) return false;
+      used.add(i);
+      return true;
+    });
+    if (!ok) continue;
+    // ...and the spots must be free
+    if (moved.some((p) => others.some((o) => mtv(o, piecePolygon(p))))) continue;
+    const byId = new Map(moved.map((p) => [p.id, p]));
+    const [ax, ay] = groupCentroid(moved.map(piecePolygon));
+    return { pieces: pieces.map((p) => byId.get(p.id) ?? p), at: [ax, ay] };
+  }
+  return null;
+}

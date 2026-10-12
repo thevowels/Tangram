@@ -2,6 +2,7 @@ import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type
 import { PIECE_BY_ID, PIECES, piecePolygon, pieceTransform, type PieceState } from "../geometry/pieces";
 import { bounds, cornerJoints, groupCentroid, toPath, type Poly, type Vec } from "../geometry/polygon";
 import { snap, turnBy } from "../game/actions";
+import { slotSnap } from "../game/check";
 import {
   lockedIds,
   moveWithPush,
@@ -17,6 +18,8 @@ interface Props {
   /** Selected piece ids: one piece, or a whole joined group. */
   selected: string[];
   guide?: Poly[];
+  /** The puzzle's exact spots (solution placed on the board): close, correctly turned pieces pull in. */
+  slots?: PieceState[];
   solved?: boolean;
   onSelect(ids: string[]): void;
   /** Live updates while dragging. */
@@ -141,7 +144,7 @@ function findJoints(pieces: PieceState[]): Joint[] {
 }
 
 export const Board = forwardRef<SVGSVGElement, Props>(function Board(
-  { board, pieces, selected, guide, solved, onSelect, onChange, onSettle, onRotate, onFlip },
+  { board, pieces, selected, guide, slots, solved, onSelect, onChange, onSettle, onRotate, onFlip },
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -177,6 +180,10 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
     const t = setTimeout(() => setFlash(null), 450);
     return () => clearTimeout(t);
   }, [flash]);
+
+  /** After a move or turn: pull into an exact spot if one is close, else snap to nearby edges. */
+  const snapAfter = (ids: string[]) =>
+    (slots && slotSnap(piecesRef.current, ids, slots)) || snap(piecesRef.current, ids, guide ?? [], board);
 
   const toWorld = (e: PointerEvent): Vec => {
     const svg = svgRef.current!;
@@ -423,7 +430,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
       setTwisting(false);
       setDragging([]);
       if (ft.applied) {
-        const snapped = snap(piecesRef.current, ft.ids, guide ?? [], board);
+        const snapped = snapAfter(ft.ids);
         if (snapped) piecesRef.current = snapped.pieces;
         onSettle(piecesRef.current);
       }
@@ -435,7 +442,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
       setTwisting(false);
       setDragging([]);
       if (dl.applied) {
-        const snapped = snap(piecesRef.current, dl.ids, guide ?? [], board);
+        const snapped = snapAfter(dl.ids);
         if (snapped) piecesRef.current = snapped.pieces;
         onSettle(piecesRef.current);
       }
@@ -465,7 +472,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
       if (performance.now() - d.startTime < TAP_TIME && d.wasSelected) onRotate(d.ids, 1);
       return;
     }
-    const snapped = snap(piecesRef.current, d.ids, guide ?? [], board);
+    const snapped = snapAfter(d.ids);
     if (snapped) {
       piecesRef.current = snapped.pieces;
       setFlash({ at: snapped.at, key: Date.now() });
