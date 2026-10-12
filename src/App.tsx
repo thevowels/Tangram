@@ -7,7 +7,7 @@ import { Toolbar } from "./components/Toolbar";
 import { JointTip } from "./components/Tip";
 import { exportBoardImage } from "./exportImage";
 import { flip, rotate } from "./game/actions";
-import { evaluate, type Puzzle } from "./game/check";
+import { evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
 import {
   figureExtent,
   fitLayout,
@@ -151,7 +151,7 @@ function usePieces(
         }
       : null;
 
-  return { pieces, selected, doRotate, doFlip, reset, boardProps };
+  return { pieces, selected, doRotate, doFlip, reset, replace: setPieces, boardProps };
 }
 
 function FreePlay() {
@@ -266,22 +266,30 @@ function PuzzlePlay({
     return () => clearInterval(t);
   }, [solvedIn]);
 
+  // set once usePieces exists below; lets the solve check pull pieces into place
+  const replacePieces = useRef<(p: PieceState[]) => void>(() => {});
+
   const check = useCallback(
     (pieces: PieceState[]) => {
       if (!guide) return;
       const { match, solved } = evaluate(pieces, guide);
       setMatch(match);
       if (solved) {
+        // close the last little gaps: every piece clicks into its exact place (100% match)
+        const exact = perfectFit(pieces, puzzle.solution, layout?.target);
+        replacePieces.current(exact ?? settleFlush(pieces, guide));
+        if (exact) setMatch(1); // exact geometry: a true 100%
         const ms = performance.now() - start.current;
         setSolvedIn(ms);
         onSolved(ms);
         navigator.vibrate?.([30, 60, 30]);
       }
     },
-    [guide, onSolved],
+    [guide, onSolved, puzzle, layout],
   );
 
   const g = usePieces(layout, trayLayout, check, true, guide ?? undefined);
+  replacePieces.current = g.replace;
   const pct = Math.round(match * 100);
 
   /** Save the figure (and the pieces around it) as an image, captioned with the puzzle. */

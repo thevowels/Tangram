@@ -3,7 +3,7 @@ import { PIECES, piecePolygon, pieceTransform, squareLayout, type PieceState } f
 import { area, bounds, cornerJoints, mtv, sharedEdges, type Poly } from "./geometry/polygon";
 import { findSnap } from "./geometry/snap";
 import { groupOf, hasOverlap, isLocked, moveWithPush, transformWithPush } from "./physics/resolve";
-import { coverage, evaluate, type Puzzle } from "./game/check";
+import { coverage, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
 import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
@@ -322,5 +322,79 @@ describe("board fits each puzzle (playable on every screen)", () => {
     const square = puzzles.find((q) => q.name === "Square")!;
     const l = fitLayout(1240, 600, figureExtent(square.polygons as Poly[]));
     expect(1240 / l.board.width).toBeGreaterThan(old * 1.5);
+  });
+});
+
+describe("solving clicks every piece into its exact place", () => {
+  // deterministic jitter
+  let seed = 7;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+
+  for (const p of puzzles) {
+    it(`${p.name}: a slightly-off solution snaps to a perfect fit`, () => {
+      // built elsewhere on the board, each piece a little off, and the identical pieces swapped:
+      // the other large/small triangle, turned so it has the same outline
+      const swap: Record<string, string> = { L1: "L2", L2: "L1", S1: "S2", S2: "S1" };
+      const r5 = (v: number) => (Math.round(v * 1e5) / 1e5 + 0).toFixed(5); // + 0 turns -0 into 0
+      const outline = (st: PieceState) =>
+        piecePolygon(st)
+          .map(([x, y]) => `${r5(x - st.x)},${r5(y - st.y)}`)
+          .sort()
+          .join(" ");
+      const asOther = (s: PieceState): PieceState => {
+        const id = swap[s.id];
+        if (!id) return s;
+        for (const flipped of [false, true])
+          for (let rot = 0; rot < 360; rot += 45)
+            if (outline({ ...s, id, rot, flipped }) === outline(s)) return { ...s, id, rot, flipped };
+        throw new Error("no matching orientation");
+      };
+      const sloppy = p.solution.map((s) => {
+        const o = asOther(s);
+        return { ...o, x: o.x + 5 + rand() * 0.2, y: o.y + 3 + rand() * 0.2 };
+      });
+      const exact = perfectFit(sloppy, p.solution)!;
+      expect(exact).not.toBeNull();
+      expect(hasOverlap(exact)).toBe(false);
+      expect(coverage(exact, p.polygons as Poly[])).toBeGreaterThan(0.999);
+      // every piece now sits exactly on a solution slot, shifted to where the figure was built
+      // (the square is unique, so it tells us the shift)
+      const samePoly = (a: Poly, b: Poly) =>
+        a.length === b.length && a.every(([x, y]) => b.some(([u, v]) => Math.hypot(x - u, y - v) < 1e-9));
+      const slots = p.solution.map(piecePolygon);
+      const sq = exact.find((e) => e.id === "SQ")!;
+      const sqSlot = p.solution.find((e) => e.id === "SQ")!;
+      const offset = [sq.x - sqSlot.x, sq.y - sqSlot.y];
+      for (const q of exact) {
+        const back = piecePolygon({ ...q, x: q.x - offset[0], y: q.y - offset[1] });
+        expect(slots.some((slot) => samePoly(back, slot)), `${p.name}: ${q.id} on a slot`).toBe(true);
+      }
+    });
+  }
+
+  it("a figure finished on the silhouette lands exactly on it", () => {
+    const sq = puzzles.find((q) => q.name === "Square")!;
+    const at: [number, number] = [6, 4];
+    // built on the outline, but one piece left a bit off (which skews the pieces' centre)
+    const sloppy = sq.solution.map((s, i) => ({ ...s, x: s.x + at[0] + (i === 0 ? 0.2 : 0), y: s.y + at[1] }));
+    const exact = perfectFit(sloppy, sq.solution, at)!;
+    exact.forEach((q) => {
+      const s = sq.solution.find((t) => t.id === q.id)!;
+      expect(q.x).toBeCloseTo(s.x + at[0], 9);
+      expect(q.y).toBeCloseTo(s.y + at[1], 9);
+    });
+  });
+
+  it("doesn't force an unrelated arrangement onto a solution", () => {
+    const swan = puzzles.find((q) => q.name === "Swan")!;
+    expect(perfectFit(squareLayout([3, 3]), swan.solution)).toBeNull();
+  });
+
+  it("the fallback closes small gaps between pieces", () => {
+    const [l1, l2] = squareLayout([5, 5]).filter((q) => q.id === "L1" || q.id === "L2");
+    const gapped = [l1, { ...l2, x: l2.x - 0.1 }]; // pulled 0.1 apart along x
+    const settled = settleFlush(gapped, []);
+    const [a, b] = settled.map(piecePolygon);
+    expect(cornerJoints(a, b).length).toBeGreaterThan(0);
   });
 });

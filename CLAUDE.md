@@ -96,7 +96,14 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
 - the **in-place** match, shown as "Match %";
 - `solved`, which is true when either the in-place IoU or the **centroid-aligned** IoU reaches `SOLVE_THRESHOLD`, so a figure built anywhere on the board counts.
 
-No per-puzzle solution data exists. Any arrangement whose shape matches the silhouette wins.
+Any arrangement whose shape matches the silhouette wins.
+
+**On solve, pieces click into place** (`perfectFit` in `check.ts`, called from `PuzzlePlay`'s check), so the finished figure, and its exported image, is a gap-free 100%:
+- **Matching:** each piece goes to the nearest slot in the puzzle's stored `solution` with the same kind *and the same outline*, within `MAX_FIT_DISTANCE`.
+  - Compare geometry, not `rot`. The two large (and two small) triangles have different base orientations, so equal outlines can have different `rot` values. A piece keeps its own rot/flip and only moves.
+- **Where the slots go:** the slots are placed where the figure was built, or exactly on the silhouette when the pieces are within `SNAP_TO_OUTLINE` of it.
+- **Fallback:** if the arrangement doesn't match the stored solution (an alternative solution), `settleFlush` snaps pieces flush to close the gaps instead.
+- **Animation:** the CSS transform transition makes the pieces glide in.
 
 **Puzzle authoring** (`scripts/figures.ts` → `scripts/build-puzzles.ts` → `src/data/puzzles.json`):
 - **Authoring:** each figure lists its 7 pieces as exact polygons. Use helpers rather than hand-typing coordinates:
