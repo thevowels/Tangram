@@ -3,6 +3,11 @@
   "name": "tangram",
   "main": "worker/index.ts",
   "compatibility_date": "2026-10-01",
+  // the public site; declared here so CI deploys keep the custom domain attached
+  "routes": [{ "pattern": "tangram.apexlearninghub.org", "custom_domain": true }],
+  // keep *.workers.dev on: version preview links (wrangler versions upload) live there
+  "workers_dev": true,
+  "preview_urls": true,
   "assets": {
     "not_found_handling": "single-page-application",
     "run_worker_first": ["/api/*"]

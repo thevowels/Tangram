@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tangram.apexlearninghub.org/sitemap.xml
