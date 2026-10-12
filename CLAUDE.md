@@ -16,10 +16,20 @@ npm run build        # tsc -b (app + worker projects) then vite build → dist/c
 npm test             # vitest run (all src/**/*.test.ts)
 npx vitest run -t "push physics"   # run a single describe/test by name
 npm run puzzles      # rebuild src/data/puzzles.json from scripts/figures.ts + write scripts/out/preview.png
-npm run deploy       # build + wrangler deploy (requires wrangler login)
+npm run deploy       # build + wrangler deploy: normally done by CI from main, see below
 ```
 
 Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pulls in the Cloudflare plugin, which fails under vitest with "There is already a server associated with the config".
+
+## CI / deploy (`.github/workflows/`)
+
+- **`ci.yml`** runs on every PR and on pushes to `main`, in this order:
+  1. `npm test`
+  2. `npm run build` (typecheck + build)
+  3. a puzzles check: `npm run puzzles`, then `git diff --exit-code src/data/puzzles.json`.
+- If you edit `scripts/figures.ts`, run `npm run puzzles` and commit the regenerated JSON, or CI fails.
+- **`deploy.yml`** runs on every push to `main` (and manually via workflow_dispatch). It tests, then runs `npm run deploy` with the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets.
+- **Production follows `main`.** Don't run `npm run deploy` from feature branches; it overwrites the live Worker until the next merge.
 
 ## Architecture
 
