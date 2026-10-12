@@ -1,5 +1,6 @@
-import { piecePolygon, type PieceState } from "../geometry/pieces";
-import { area, bounds, centroid, pointInLoops, type Poly } from "../geometry/polygon";
+import { PIECE_BY_ID, piecePolygon, type PieceState } from "../geometry/pieces";
+import { area, bounds, centroid, groupCentroid, mtv, pointInLoops, type Poly } from "../geometry/polygon";
+import { findSnap } from "../geometry/snap";
 
 // outlines are exact unions of the pieces, so a real solution scores ≈1
 export const SOLVE_THRESHOLD = 0.94;
@@ -82,4 +83,84 @@ export function evaluate(pieces: PieceState[], placedSilhouette: Poly[]) {
   const inPlace = coverage(pieces, placedSilhouette, false);
   const solved = inPlace >= SOLVE_THRESHOLD || coverage(pieces, placedSilhouette) >= SOLVE_THRESHOLD;
   return { match: inPlace, solved };
+}
+
+/** How far a piece may sit from its exact slot and still be pulled into it on solve. */
+const MAX_FIT_DISTANCE = 0.8;
+/** A finished figure this close to the drawn silhouette lands exactly on it. */
+const SNAP_TO_OUTLINE = 0.5;
+
+const shapeKey = (s: PieceState) => {
+  const p = piecePolygon(s);
+  const [cx, cy] = centroid(p);
+  return p.map(([x, y]) => [x - cx, y - cy]);
+};
+const sameShape = (a: number[][], b: number[][]) =>
+  a.length === b.length && a.every(([x, y]) => b.some(([u, v]) => Math.hypot(x - u, y - v) < 1e-3));
+
+/**
+ * Snap a solved-but-slightly-off arrangement onto the puzzle's exact solution, so the figure
+ * is a perfect match with no gaps. Each piece goes to the nearest solution slot of the same
+ * shape and orientation (so the two large / two small triangles are interchangeable), with
+ * the slots placed where the pieces actually are (the figure may be built anywhere), or exactly
+ * on the silhouette when it was built on it.
+ * Returns null if the pieces don't correspond to this solution (e.g. an alternative one).
+ */
+export function perfectFit(
+  pieces: PieceState[],
+  solution: PieceState[],
+  /** Where the silhouette is drawn: a figure built (nearly) on it snaps exactly onto it. */
+  outlineAt?: [number, number],
+): PieceState[] | null {
+  let [cx, cy] = groupCentroid(pieces.map(piecePolygon));
+  if (outlineAt && Math.hypot(cx - outlineAt[0], cy - outlineAt[1]) < SNAP_TO_OUTLINE) [cx, cy] = outlineAt;
+  const slots = solution.map((s) => ({ ...s, x: s.x + cx, y: s.y + cy }));
+  const pairs: { piece: number; slot: number; d: number }[] = [];
+  pieces.forEach((p, i) => {
+    const shape = shapeKey(p);
+    slots.forEach((s, j) => {
+      // same kind, and already turned to the slot's exact outline (identical pieces like the two
+      // large triangles have different base orientations, so compare geometry, not rot values)
+      if (PIECE_BY_ID[s.id].kind !== PIECE_BY_ID[p.id].kind || !sameShape(shape, shapeKey(s))) return;
+      const d = Math.hypot(p.x - s.x, p.y - s.y);
+      if (d <= MAX_FIT_DISTANCE) pairs.push({ piece: i, slot: j, d });
+    });
+  });
+  pairs.sort((a, b) => a.d - b.d);
+  const slotOf = new Map<number, number>();
+  const taken = new Set<number>();
+  for (const { piece, slot } of pairs) {
+    if (slotOf.has(piece) || taken.has(slot)) continue;
+    slotOf.set(piece, slot);
+    taken.add(slot);
+  }
+  if (slotOf.size !== pieces.length) return null;
+  // same outline, so only the position changes (state x/y is the piece's centroid)
+  return pieces.map((p, i) => {
+    const s = slots[slotOf.get(i)!];
+    return { ...p, x: s.x, y: s.y };
+  });
+}
+
+/**
+ * Fallback for arrangements that don't match the stored solution: repeatedly snap each piece
+ * flush against its neighbours and the outline (never creating overlaps) to close small gaps.
+ */
+export function settleFlush(pieces: PieceState[], outline: Poly[], passes = 4): PieceState[] {
+  let state = pieces;
+  for (let pass = 0; pass < passes; pass++) {
+    let moved = false;
+    for (const p of state) {
+      const s = findSnap(state, p.id, outline, 0.25);
+      if (!s) continue;
+      const next = state.map((q) => (q.id === p.id ? { ...q, x: q.x + s.offset[0], y: q.y + s.offset[1] } : q));
+      const polys = next.map(piecePolygon);
+      const i = next.findIndex((q) => q.id === p.id);
+      if (polys.some((other, j) => j !== i && mtv(other, polys[i]))) continue;
+      state = next;
+      moved = true;
+    }
+    if (!moved) break;
+  }
+  return state;
 }
