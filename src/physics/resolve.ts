@@ -93,7 +93,13 @@ export function groupOf(pieces: PieceState[], id: string): string[] {
  * The fixed pieces are their own body: nothing else joins them during the move.
  * Returns null when the arrangement can't be settled (e.g. pieces jammed against a wall).
  */
-export function resolve(pieces: PieceState[], fixed: string | string[], board: Board): PieceState[] | null {
+export function resolve(
+  pieces: PieceState[],
+  fixed: string | string[],
+  board: Board,
+  /** Pieces that move freely but don't join groups this time (e.g. one that was just turned). */
+  loose: string[] = [],
+): PieceState[] | null {
   const fixedIds = new Set(asIds(fixed));
   const out = pieces.map((p) => ({ ...p }));
   const polys = out.map(piecePolygon);
@@ -111,7 +117,9 @@ export function resolve(pieces: PieceState[], fixed: string | string[], board: B
   if (!anyOverlap) return out;
 
   const FIXED = -1;
-  const group = stickyGroups(out, fixedIds, polys).map((g, i) => (fixedIds.has(out[i].id) ? FIXED : g));
+  const group = stickyGroups(out, new Set([...fixedIds, ...loose]), polys).map((g, i) =>
+    fixedIds.has(out[i].id) ? FIXED : g,
+  );
   const members = (g: number) => out.map((_, i) => i).filter((i) => group[i] === g);
   // groups held by the outline behave like walls: they never get pushed
   const locked = lockedIds(out, board, fixedIds);
@@ -159,8 +167,9 @@ export function resolve(pieces: PieceState[], fixed: string | string[], board: B
       else if (b.maxY > board.height) dy = board.height - b.maxY;
       if (dx || dy) shiftGroup(g, dx, dy);
     }
-    if (!collided) return out;
+    if (!collided) break;
   }
+  // never hand back overlapping pieces (e.g. an overlap hidden inside one group)
   return hasOverlap(out) ? null : out;
 }
 
@@ -230,7 +239,12 @@ export function moveWithPush(pieces: PieceState[], ids: string | string[], targe
   return state;
 }
 
-/** Replace some pieces' states (rotation/flip/snap) and push neighbours away; null if they can't fit. */
+/**
+ * Replace some pieces' states (rotation/flip/snap) and push neighbours away. If that's
+ * impossible because the changed pieces now hit something immovable (a piece locked to the
+ * outline, or a jammed wall), let the changed pieces themselves be nudged clear instead of
+ * refusing. Returns null only if nothing works.
+ */
 export function transformWithPush(
   pieces: PieceState[],
   next: PieceState | PieceState[],
@@ -238,6 +252,11 @@ export function transformWithPush(
 ): PieceState[] | null {
   const list = Array.isArray(next) ? next : [next];
   const byId = new Map(list.map((p) => [p.id, p]));
-  const replaced = pieces.map((p) => byId.get(p.id) ?? p);
-  return resolve(clampAll(replaced, new Set(byId.keys()), board), [...byId.keys()], board);
+  const replaced = clampAll(
+    pieces.map((p) => byId.get(p.id) ?? p),
+    new Set(byId.keys()),
+    board,
+  );
+  const ids = [...byId.keys()];
+  return resolve(replaced, ids, board) ?? resolve(replaced, [], board, ids);
 }

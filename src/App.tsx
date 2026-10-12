@@ -7,7 +7,17 @@ import { Toolbar } from "./components/Toolbar";
 import { JointTip } from "./components/Tip";
 import { flip, rotate } from "./game/actions";
 import { evaluate, type Puzzle } from "./game/check";
-import { fitLayout, freeLayout, LANDSCAPE, placeSilhouette, remap, trayLayout, type Layout } from "./game/layout";
+import {
+  figureExtent,
+  fitLayout,
+  freeLayout,
+  LANDSCAPE,
+  placeSilhouette,
+  remap,
+  trayLayout,
+  type Extent,
+  type Layout,
+} from "./game/layout";
 import type { PieceState } from "./geometry/pieces";
 import type { Poly } from "./geometry/polygon";
 import { loadDesigns, loadSolved, saveDesigns, saveSolved, type Design } from "./storage";
@@ -28,15 +38,18 @@ function useMedia(query: string) {
   return match;
 }
 
-/** Fit a board layout to the element's size; null until it has been measured. */
-function useFitLayout(ref: RefObject<HTMLElement | null>) {
+/**
+ * Fit a board layout to the element's size; null until it has been measured. In puzzles the
+ * board is sized for that puzzle's silhouette (`figure`), so small figures get big pieces.
+ */
+function useFitLayout(ref: RefObject<HTMLElement | null>, figure?: Extent) {
   const [layout, setLayout] = useState<Layout | null>(null);
   useLayoutEffect(() => {
     const el = ref.current!;
     const update = () => {
       const { width, height } = el.getBoundingClientRect();
       if (width < 50 || height < 50) return;
-      const next = fitLayout(width, height);
+      const next = fitLayout(width, height, figure);
       setLayout((prev) =>
         prev &&
         prev.board.width === next.board.width &&
@@ -49,7 +62,7 @@ function useFitLayout(ref: RefObject<HTMLElement | null>) {
     const ro = new ResizeObserver(update);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [ref]);
+  }, [ref, figure]);
   return layout;
 }
 
@@ -267,7 +280,8 @@ function PuzzlePlay({
   onBack(): void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
-  const layout = useFitLayout(stageRef);
+  const figure = useMemo(() => figureExtent(puzzle.polygons), [puzzle]);
+  const layout = useFitLayout(stageRef, figure);
   const guide = useMemo(
     () => (layout ? placeSilhouette(puzzle.polygons, layout.target) : null),
     [puzzle, layout],

@@ -35,15 +35,22 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
 
 **Units and coordinates.** Everything is in "tan units": a small triangle has legs of 1, so the 7 pieces total area 8. The board is an SVG whose `viewBox` is the board size in tan units. Pointer positions are converted with `getScreenCTM().inverse()`, and screen px per unit comes from `getScreenCTM().a`, because the viewBox is letterboxed inside the element.
 
-**Responsive layouts** (`src/game/layout.ts`). There is no visible board: the SVG fills the `.stage` element and pieces sit directly on the page backdrop. So the board is fitted to the stage:
-- `useFitLayout` in `App.tsx` measures the stage with a ResizeObserver and calls `fitLayout(w, h)`.
-- `fitLayout` picks landscape (silhouette left, tray right) or portrait (silhouette top, tray below), whichever gives bigger pieces. Each has a minimum size (`MIN_LANDSCAPE` / `MIN_PORTRAIT`), and px-per-unit is capped at `MAX_UNIT_PX`.
-- The board's aspect ratio matches the stage exactly, so the invisible walls are the stage edges. The silhouette and tray stay grouped around the centre.
+**Responsive layouts** (`src/game/layout.ts`). There is no visible board: the SVG fills the `.stage` element and pieces sit directly on the page backdrop.
+- `useFitLayout(ref, figure?)` in `App.tsx` measures the stage, then calls `fitLayout(w, h, figure)`.
+- **The board is sized per puzzle.** `needs()` computes the smallest board that fits *that* silhouette (`figureExtent()`) plus the starting tray (`trayExtent()`, the square exploded by `TRAY_SPREAD`):
+  - `GAP` between silhouette and tray, `MARGIN` around everything;
+  - `SLACK` along the axis pieces travel, `CROSS_SLACK` across it.
+  - Free play uses `FREE_MIN`.
+- `fitLayout` then picks landscape (silhouette left, tray right) or portrait (silhouette top, tray below), whichever gives bigger pieces, capped at `MAX_UNIT_PX`.
+- `makeLayout` centres the silhouette and tray together.
+- **Small figures get big pieces; wide ones are limited by the screen.** The Dog is 8 units wide, so on a ~345px phone it can't exceed ~43px per unit.
+- **Playability tests:** the `board fits each puzzle` tests check every puzzle on six screen sizes:
+  - the silhouette and the tray fit, without overlapping;
+  - the tray pieces start apart;
+  - every piece can be turned in the tray and placed into the solution.
+  Run them after touching any of these constants.
 - Pieces are created only once the layout is known; `usePieces` starts with `null`.
-- On every resize, `remap()` moves each piece by its offset from the nearest anchor (silhouette or tray in puzzles, board centre in free play), so a half-built figure survives resizes and phone rotation.
-- Saved designs store the `Layout` they were made on and are remapped when loaded.
-- `LANDSCAPE` / `PORTRAIT` are fixed reference layouts, used by tests and as the fallback for old saves.
-- If you change minimum sizes or anchors, make sure the tallest silhouette (≈6.6 units) still clears the tray; the `layouts` tests check the tray fits.
+- On every resize, `remap()` moves each piece by its offset from the nearest anchor (silhouette or tray in puzzles, board centre in free play), so a half-built figure survives resizes and phone rotation. Saved designs store the `Layout` they were made on and are remapped when loaded.
 
 **Piece model** (`src/geometry/pieces.ts`):
 - Each piece's `shape` is its polygon in the classic 2√2 square layout, re-centered on its centroid. `rot: 0` therefore means "as in the square", and `squareLayout()` reproduces the solved square.
@@ -71,6 +78,8 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
   - `resolve()` returns immediately when nothing overlaps; groups and locks are only computed once something collides.
   - `moveWithPush()` stops sub-stepping once a step makes no progress.
   - Keep both. Without them, pushing against a locked piece costs ~11 resolves × ~30 sub-steps per pointer move, and the page stalls.
+- **`transformWithPush` (turn/flip/snap) never refuses just because the turned piece hits something immovable.** If neighbours can't be pushed (locked to the outline, or jammed), it retries with the turned piece itself nudged clear (`resolve(…, [], board, ids)`).
+- `resolve` never returns overlapping pieces.
 - **What moves:** `resolve(pieces, fixed)`, `moveWithPush(pieces, ids, …)` and `transformWithPush(pieces, states[])` all accept several pieces, which then move as one rigid body. Those `fixed` pieces are excluded from grouping during the move, so nothing new latches onto the body mid-drag.
 - `resolve()` returns `null` when it can't settle, e.g. pieces jammed against a wall.
 - `moveWithPush()` subdivides a drag into ≤0.2-unit steps so pieces can't tunnel. Each step tries the direct move, then axis-aligned slides, then bisects toward the furthest valid point.
@@ -119,6 +128,7 @@ No per-puzzle solution data exists. Any arrangement whose shape matches the silh
   - **Free twist** (`FreeTwist`): a finger landing on empty space inside the zone becomes `pending`. If a second finger lands in the zone, on a piece or not, both fingers rotate the selection in place. Lifting either finger ends it, then snaps and settles.
   - **One-finger dial** (`Dial`): if the pending finger moves ≥ `TAP_PX` before a second one arrives, it becomes a joystick-style dial. The selection turns in 45° steps to follow the finger's angle around the zone centre, ignoring the `DIAL_DEAD_ZONE` near the centre. No touch marker is drawn; only the ring highlights. Works with a mouse too.
   - A pending finger lifted quickly counts as a tap on empty space and clears the selection.
+  - **The floating buttons** sit inside the ring, so they start a `pending` too (`onButtonDown`). A tap presses the button, and moving from one starts the dial.
   - `secondFinger()` routes any extra finger to the active gesture instead of starting a competing one.
 - The selected piece gets floating ↺ ↻ ⇋ buttons (`PieceActions`), sized in screen px (`BUTTON_PX`) so they stay thumb-sized on phones. They are placed above the piece, or below if there's no room.
 - The same actions are in the `Toolbar` and on the keys `R` / `Shift+R` (or `E`) / `F` / `Esc`.
