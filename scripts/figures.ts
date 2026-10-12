@@ -58,6 +58,16 @@ const shift = (pieces: FigurePiece[], dx: number, dy: number): FigurePiece[] =>
 const transpose = (pieces: FigurePiece[]): FigurePiece[] =>
   pieces.map((p) => ({ ...p, pts: p.pts.map(([x, y]): Vec => [y, x]) }));
 
+/** Rotate 45° clockwise on screen about the origin (exact for tan coordinates). */
+const rot45 = (pieces: FigurePiece[]): FigurePiece[] =>
+  pieces.map((p) => ({ ...p, pts: p.pts.map(([x, y]): Vec => [(x - y) * Math.SQRT1_2, (x + y) * Math.SQRT1_2]) }));
+
+/** The two large triangles as a 2×2 square with top-left corner (x, y). */
+const square2 = (x: number, y: number): FigurePiece[] => [
+  raw("large", [x, y], [x + 2, y], [x, y + 2]),
+  raw("large", [x + 2, y], [x + 2, y + 2], [x, y + 2]),
+];
+
 /** Rotate 90° clockwise on screen: (x, y) → (-y, x). */
 const turn = (pieces: FigurePiece[]): FigurePiece[] =>
   pieces.map((p) => ({ ...p, pts: p.pts.map(([x, y]): Vec => [-y, x]) }));
@@ -139,7 +149,7 @@ function fish(): FigurePiece[] {
   return [body1, body2, dorsal, belly, tail, upper, lower];
 }
 
-export const FIGURES: Figure[] = [
+const BASE_FIGURES: Figure[] = [
   // ---- Shapes ----
   {
     name: "Square",
@@ -321,3 +331,315 @@ export const FIGURES: Figure[] = [
     ],
   },
 ];
+
+// ---- second batch (appended so existing puzzle ids, and saved progress, stay put) ----
+
+const hourglass = (): FigurePiece[] => [...rot45(classicSmall()), ...roof([0, 4])];
+
+function kite(): FigurePiece[] {
+  const top: Vec = [0, -SQRT2];
+  const left: Vec = [-SQRT2, 0];
+  const right: Vec = [SQRT2, 0];
+  const bottom: Vec = [0, SQRT2];
+  const knot: Vec = [0, 2 * SQRT2]; // bottom of the tail's first diamond
+  const end: Vec = [-1, knot[1] + 2]; // where the ribbon ends (it runs down-left)
+  return [
+    raw("large", left, top, right),
+    raw("large", left, bottom, right),
+    sq(bottom, 45),
+    tri("small", knot, 135), // bow
+    tri("small", knot, 315),
+    para(knot, 90, 45), // ribbon
+    tri("medium", end, 45), // final bow
+  ];
+}
+
+function hen(): FigurePiece[] {
+  const top: Vec = [0, -SQRT2];
+  const left: Vec = [-SQRT2, 0];
+  const right: Vec = [SQRT2, 0];
+  const bottom: Vec = [0, SQRT2];
+  return [
+    raw("large", left, top, right),
+    raw("large", left, bottom, right),
+    sq(right, 270), // head
+    tri("small", [SQRT2 + 1, -1], 0), // beak
+    tri("small", [SQRT2, -1], 270), // comb
+    para(left, 180, 45), // tail
+    tri("medium", bottom, 45), // legs
+  ];
+}
+
+const MORE_FIGURES: Figure[] = [
+  // ---- Shapes ----
+  {
+    name: "Diamond",
+    category: "Shapes",
+    pieces: rot45([raw("large", A, B, O), raw("large", A, O, D), ...classicSmall()]),
+  },
+  { name: "Hourglass", category: "Shapes", pieces: hourglass() },
+  { name: "Step", category: "Shapes", pieces: [...square2(0, 0), ...shift(strip(), 0, 2)] },
+
+  // ---- Things ----
+  { name: "Bow tie", category: "Things", pieces: turn(hourglass()) },
+  { name: "Kite", category: "Things", pieces: kite() },
+  { name: "Tent", category: "Things", pieces: [...roof([2, 0]), ...shift(strip(), 0, 2)] },
+  {
+    name: "Crown",
+    category: "Things",
+    pieces: [raw("large", [0, 0], [0, 2], [2, 2]), raw("large", [4, 0], [4, 2], [2, 2]), ...shift(strip(), 0, 2)],
+  },
+  {
+    name: "Candle",
+    category: "Things",
+    pieces: [
+      raw("square", [0, 2], [1, 2], [1, 3], [0, 3]),
+      raw("small", [0, 3], [1, 3], [0, 4]),
+      raw("small", [1, 3], [1, 4], [0, 4]),
+      raw("medium", [-0.5, 2], [1.5, 2], [0.5, 1]),
+      ...roof([0.5, 4]),
+      raw("parallelogram", [2.5, 6], [3.5, 6], [4.5, 5], [3.5, 5]),
+    ],
+  },
+  { name: "Umbrella", category: "Things", pieces: [...roof([2, 0]), ...shift(transpose(strip()), 1.5, 2)] },
+  {
+    name: "Teapot",
+    category: "Things",
+    pieces: [
+      ...square2(1, 1),
+      raw("small", [1, 1], [2, 1], [2, 0]),
+      raw("small", [2, 0], [2, 1], [3, 1]),
+      raw("parallelogram", [3, 1], [3, 2], [4, 1], [4, 0]),
+      raw("medium", [1, 1], [1, 3], [0, 2]),
+      raw("square", [1.5, 3], [2.5, 3], [2.5, 4], [1.5, 4]),
+    ],
+  },
+  {
+    name: "Airplane",
+    category: "Things",
+    pieces: [
+      ...shift(strip(), 0, 1.5),
+      raw("large", [1, 1.5], [3, 1.5], [1, -0.5]),
+      raw("large", [1, 2.5], [3, 2.5], [1, 4.5]),
+    ],
+  },
+  { name: "Hat", category: "Things", pieces: [...square2(1, 0), ...shift(strip(), 0, 2)] },
+  {
+    name: "Ice cream",
+    category: "Things",
+    pieces: [
+      raw("large", [0, 0], [2, 0], [2, 2]),
+      raw("large", [2, 0], [4, 0], [2, 2]),
+      ...shift(smallSquare(), 1, -2),
+    ],
+  },
+  {
+    name: "Mushroom",
+    category: "Things",
+    pieces: [
+      ...roof([2, 0]),
+      raw("square", [1.5, 2], [2.5, 2], [2.5, 3], [1.5, 3]),
+      raw("small", [1.5, 3], [2.5, 3], [1.5, 4]),
+      raw("small", [2.5, 3], [2.5, 4], [1.5, 4]),
+      raw("medium", [-0.5, 4], [1.5, 4], [0.5, 3]),
+      raw("parallelogram", [2.5, 4], [3.5, 4], [4.5, 3], [3.5, 3]),
+    ],
+  },
+
+  // ---- Animals ----
+  {
+    name: "Butterfly",
+    category: "Animals",
+    pieces: [
+      raw("large", [2, 2], [0, 0], [0, 2]),
+      raw("large", [2, 2], [4, 0], [4, 2]),
+      raw("medium", [0, 2], [2, 2], [1, 3]),
+      raw("small", [2, 2], [3, 3], [3, 2]),
+      raw("small", [3, 2], [3, 3], [4, 2]),
+      sq([2, 2], 45),
+      raw("parallelogram", [2, 2], [2, 1], [3, 0], [3, 1]),
+    ],
+  },
+  {
+    name: "Penguin",
+    category: "Animals",
+    pieces: [
+      ...square2(0, 1),
+      raw("square", [0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1]),
+      raw("small", [1.5, 0], [1.5, 1], [2.5, 1]),
+      raw("medium", [0, 1], [0, 3], [-1, 2]),
+      raw("small", [2, 1], [3, 2], [2, 2]),
+      raw("parallelogram", [0.5, 3], [1.5, 3], [2.5, 4], [1.5, 4]),
+    ],
+  },
+  {
+    name: "Duck",
+    category: "Animals",
+    pieces: [
+      raw("large", [0, 3], [2, 1], [2, 3]),
+      raw("large", [2, 1], [2, 3], [4, 3]),
+      raw("parallelogram", [3, 2], [3, 1], [4, 0], [4, 1]),
+      raw("square", [4, 0], [5, 0], [5, 1], [4, 1]),
+      raw("small", [5, 0], [6, 1], [5, 1]),
+      raw("medium", [1, 2], [2, 1], [0, 1]),
+      raw("small", [0, 3], [-1, 2], [0, 2]),
+    ],
+  },
+  {
+    name: "Camel",
+    category: "Animals",
+    pieces: [
+      ...roof([2, 0]),
+      raw("parallelogram", [1, 1], [0, 1], [-1, 0], [0, 0]),
+      raw("square", [-2, -1], [-1, -1], [-1, 0], [-2, 0]),
+      raw("small", [0, 2], [1, 2], [1, 3]),
+      raw("small", [3, 2], [4, 2], [3, 3]),
+      raw("medium", [4, 0], [4, 2], [5, 1]),
+    ],
+  },
+  {
+    name: "Horse",
+    category: "Animals",
+    pieces: [
+      raw("large", [0, 1], [2, 1], [2, 3]),
+      raw("large", [2, 1], [4, 1], [4, 3]),
+      raw("parallelogram", [4, 1], [4, 0], [5, -1], [5, 0]),
+      raw("medium", [5, -1], [5, 1], [6, 0]),
+      raw("small", [5, -2], [5, -1], [6, -1]),
+      raw("small", [0, 1], [-1, 2], [0, 2]),
+      raw("square", [4, 2], [5, 2], [5, 3], [4, 3]),
+    ],
+  },
+  { name: "Hen", category: "Animals", pieces: hen() },
+  {
+    name: "Fox",
+    category: "Animals",
+    pieces: [
+      raw("medium", [-1, 0], [1, 0], [0, 1]),
+      raw("small", [-1, 0], [-1, -1], [0, 0]),
+      raw("small", [1, 0], [1, -1], [0, 0]),
+      raw("large", [0, 1], [0, 3], [2, 3]),
+      raw("large", [0, 3], [0, 5], [2, 5]),
+      raw("square", [2, 4], [3, 4], [3, 5], [2, 5]),
+      raw("parallelogram", [3, 4], [4, 3], [5, 3], [4, 4]),
+    ],
+  },
+  {
+    name: "Elephant",
+    category: "Animals",
+    pieces: [
+      ...square2(1, 0),
+      raw("square", [3, 0], [4, 0], [4, 1], [3, 1]),
+      raw("parallelogram", [3, 1], [4, 1], [5, 2], [4, 2]),
+      raw("small", [1, 2], [2, 2], [1, 3]),
+      raw("small", [2, 2], [3, 2], [3, 3]),
+      raw("medium", [1, 0], [1, 2], [0, 1]),
+    ],
+  },
+  {
+    name: "Whale",
+    category: "Animals",
+    pieces: [
+      raw("large", [0, 2], [2, 0], [2, 2]),
+      raw("large", [2, 0], [4, 0], [4, 2]),
+      raw("medium", [2, 2], [4, 2], [3, 1]),
+      raw("small", [2, 0], [2, 1], [3, 1]),
+      raw("small", [2, 1], [2, 2], [3, 1]),
+      raw("square", [4, 1], [5, 1], [5, 2], [4, 2]),
+      raw("parallelogram", [5, 1], [6, 0], [7, 0], [6, 1]),
+    ],
+  },
+  {
+    name: "Owl",
+    category: "Animals",
+    pieces: [
+      ...square2(0, 1),
+      raw("small", [0, 1], [0, 0], [1, 1]),
+      raw("small", [2, 1], [2, 0], [1, 1]),
+      raw("parallelogram", [0, 1], [0, 2], [-1, 3], [-1, 2]),
+      raw("medium", [2, 1], [2, 3], [3, 2]),
+      raw("square", [0.5, 3], [1.5, 3], [1.5, 4], [0.5, 4]),
+    ],
+  },
+  {
+    name: "Bear",
+    category: "Animals",
+    pieces: [
+      ...square2(0, 0),
+      raw("medium", [2, 0], [2, 2], [3, 1]),
+      raw("small", [1, 0], [2, 0], [2, -1]),
+      raw("square", [0, 2], [1, 2], [1, 3], [0, 3]),
+      raw("parallelogram", [1, 2], [2, 2], [3, 3], [2, 3]),
+      raw("small", [-1, 1], [0, 1], [0, 0]),
+    ],
+  },
+
+  // ---- People ----
+  {
+    name: "Waving",
+    category: "People",
+    pieces: [
+      raw("square", [1, 0], [2, 0], [2, 1], [1, 1]),
+      raw("large", [0.5, 1], [2.5, 1], [0.5, 3]),
+      raw("large", [2.5, 1], [2.5, 3], [0.5, 3]),
+      raw("small", [0.5, 1], [0.5, 0], [-0.5, 0]),
+      raw("small", [2.5, 1], [2.5, 2], [3.5, 2]),
+      raw("medium", [0.5, 3], [1.5, 4], [0.5, 5]),
+      raw("parallelogram", [2.5, 3], [2.5, 4], [1.5, 5], [1.5, 4]),
+    ],
+  },
+  {
+    name: "Runner",
+    category: "People",
+    pieces: [
+      raw("square", [2.5, 0], [3.5, 0], [3.5, 1], [2.5, 1]),
+      raw("large", [1.5, 1], [3.5, 1], [1.5, 3]),
+      raw("small", [3.5, 1], [4.5, 1], [3.5, 2]),
+      raw("small", [1.5, 1], [0.5, 1], [1.5, 2]),
+      raw("large", [1.5, 3], [1.5, 5], [-0.5, 5]),
+      raw("parallelogram", [1.5, 3], [2.5, 3], [3.5, 4], [2.5, 4]),
+      raw("medium", [3.5, 4], [3.5, 6], [2.5, 5]),
+    ],
+  },
+  {
+    name: "Sitter",
+    category: "People",
+    pieces: [
+      raw("square", [0, 0], [1, 0], [1, 1], [0, 1]),
+      raw("large", [0, 1], [0, 3], [2, 3]),
+      raw("large", [0, 3], [2, 3], [0, 5]),
+      raw("medium", [2, 3], [4, 3], [3, 2]),
+      raw("parallelogram", [4, 3], [4, 4], [3, 5], [3, 4]),
+      raw("small", [3, 5], [4, 5], [4, 4]),
+      raw("small", [2, 2], [3, 2], [2, 3]),
+    ],
+  },
+  {
+    name: "Jumper",
+    category: "People",
+    pieces: [
+      raw("square", [0.5, 0], [1.5, 0], [1.5, 1], [0.5, 1]),
+      ...square2(0, 1),
+      raw("small", [0, 1], [0, 0], [-1, 0]),
+      raw("small", [2, 1], [2, 0], [3, 0]),
+      raw("medium", [0, 3], [0, 5], [-1, 4]),
+      raw("parallelogram", [2, 3], [2, 4], [3, 5], [3, 4]),
+    ],
+  },
+  {
+    name: "Kicker",
+    category: "People",
+    pieces: [
+      raw("square", [1, 0], [2, 0], [2, 1], [1, 1]),
+      raw("large", [0.5, 1], [2.5, 1], [0.5, 3]),
+      raw("large", [2.5, 1], [2.5, 3], [0.5, 3]),
+      raw("small", [0.5, 1], [0.5, 2], [-0.5, 2]),
+      raw("small", [2.5, 1], [2.5, 2], [3.5, 2]),
+      raw("medium", [0.5, 3], [1.5, 4], [0.5, 5]),
+      raw("parallelogram", [1.5, 3], [2.5, 3], [3.5, 4], [2.5, 4]),
+    ],
+  },
+];
+
+export const FIGURES: Figure[] = [...BASE_FIGURES, ...MORE_FIGURES];
+

@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An interactive tangram player: React + TypeScript (Vite) deployed as a Cloudflare Worker with static assets. It has two modes:
 - **Free play:** arrange the 7 tans; save designs to localStorage; export PNG.
-- **Puzzles:** fill one of 20 hand-authored silhouettes (`scripts/figures.ts`). `tangram_asset.jpg` is the user's original inspiration sheet; it isn't used by the code.
+- **Puzzles:** fill one of 50 hand-authored silhouettes (`scripts/figures.ts`). `tangram_asset.jpg` is the user's original inspiration sheet; it isn't used by the code.
 
 ## Commands
 
@@ -125,6 +125,8 @@ Any arrangement whose shape matches the silhouette wins.
 - **Output:** each puzzle has `category`, `polygons` (centred on the figure's centroid) and the authored `solution`.
 - **Tests:** the `puzzles` tests check every stored solution covers its outline at >99%.
 - **Checking new figures:** always look at `scripts/out/preview.png` after adding one.
+- **Keep ids stable:** puzzle ids (`p01`…) come from array order, and saved progress (`tangram.solved`) is keyed by id. So add new figures **at the end** (`MORE_FIGURES`), never in the middle. Categories group them in the picker regardless of order.
+- **Composition helpers:** `rot45` (turn a figure 45°) and `square2` (the two large triangles as a 2×2 square) join the sub-assemblies above.
 
 **Image export** (`src/exportImage.ts`, `exportBoardImage`):
 - Both modes export the board through this module.
