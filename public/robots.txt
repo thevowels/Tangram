@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://tangram.aungphyohtet.workers.dev/sitemap.xml
