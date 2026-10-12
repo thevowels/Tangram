@@ -540,6 +540,7 @@ button.primary:hover:not(:disabled) {
 
 .success-card div {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
 }
