@@ -48,7 +48,9 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
 **No-overlap physics** (`src/physics/resolve.ts`). Pieces never overlap; dragging pushes pieces out of the way.
 - `resolve()` runs iterative SAT separation (`mtv()` in `geometry/polygon.ts`; all tans are convex). One piece is held fixed, pieces it overlaps are pushed fully, and other pairs split the push. Pieces are clamped to the board.
 - **Sticky groups:** `stickyGroups()` links pieces that share an edge into connected components, recomputed on every `resolve()` call.
-  - "Share an edge" means `sharedEdges()` in `geometry/polygon.ts` finds parallel edges within `STICK_TOL` that overlap by ≥ `STICK_MIN_LENGTH`. Corner-to-corner or tip-to-edge touches do **not** join pieces.
+  - "Share an edge" means `cornerJoints()` in `geometry/polygon.ts`: a flush, parallel stretch (`sharedEdges()`, within `STICK_TOL`, overlapping ≥ `STICK_MIN_LENGTH`) where **at least one end is a corner of both pieces**. That's the user's rule: together the pieces must form a clean new corner or a continued edge.
+  - Pieces slid partway along each other, or touching only at a corner or tip, do **not** join.
+  - Outline locking (`isLocked`) deliberately still uses plain `sharedEdges()`, because a correctly placed piece can sit mid-way along the silhouette's border.
   - Collisions shift a whole group rigidly, and board clamping is per group, so bumping a built figure never breaks it apart.
 - **Locking to the outline:** in puzzles the physics board carries `outline`, the placed silhouette. `usePieces` builds `{ ...layout.board, outline }`.
   - `isLocked()`: a piece is locked when it sits inside the silhouette with an edge flush against its border.
@@ -102,7 +104,12 @@ No per-puzzle solution data exists. Any arrangement whose shape matches the silh
 - `JointTip` shows a one-time explanation over the board; the flag is stored in localStorage under `tangram.tip.joints`.
 - Pressing a piece selects it and starts a drag. Movement under `TAP_PX` screen px is a tap.
 - Tapping an *already-selected* piece rotates it 45°. The first tap only selects; `Drag.wasSelected` is captured at pointer-down.
-- **Two-finger twist:** while one finger drags a piece, a second finger down anywhere starts a `Twist`. The angle between the fingers rotates the piece in 45° steps (`applyTwist` → `setRotation`), and a dashed ring shows the twist. Lifting the second finger keeps the drag going.
+- **Two-finger twist:** only fingers inside the selection's **zone** count. The zone is a circle around the selection with margin `ZONE_MARGIN` (`zoneOf` / `inZone`), shown as a faint `.twist-zone` ring on touch screens.
+  - **Drag + twist** (`Twist`): one finger drags the piece and a second lands in the zone; the angle between them rotates in 45° steps.
+  - **Free twist** (`FreeTwist`): a finger landing on empty space inside the zone becomes `pending`. If a second finger lands in the zone, on a piece or not, both fingers rotate the selection in place. Lifting either finger ends it, then snaps and settles.
+  - **One-finger dial** (`Dial`): if the pending finger moves ≥ `TAP_PX` before a second one arrives, it becomes a joystick-style dial. The selection turns in 45° steps to follow the finger's angle around the zone centre, ignoring the `DIAL_DEAD_ZONE` near the centre. No touch marker is drawn; only the ring highlights. Works with a mouse too.
+  - A pending finger lifted quickly counts as a tap on empty space and clears the selection.
+  - `secondFinger()` routes any extra finger to the active gesture instead of starting a competing one.
 - The selected piece gets floating ↺ ↻ ⇋ buttons (`PieceActions`), sized in screen px (`BUTTON_PX`) so they stay thumb-sized on phones. They are placed above the piece, or below if there's no room.
 - The same actions are in the `Toolbar` and on the keys `R` / `Shift+R` (or `E`) / `F` / `Esc`.
 - A snap triggers a short vibration (`navigator.vibrate`) and an orange flash at the contact point.

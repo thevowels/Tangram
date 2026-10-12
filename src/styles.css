@@ -251,12 +251,21 @@ button.primary:hover:not(:disabled) {
   transition: transform 0.12s ease-out;
 }
 
-.twist-ring {
-  fill: none;
-  stroke: rgb(255 255 255 / 0.45);
-  stroke-width: 0.04;
+/* where a second finger can land to twist the selection (shown on touch screens) */
+.twist-zone {
+  fill: rgb(255 255 255 / 0.03);
+  stroke: rgb(255 255 255 / 0.18);
+  stroke-width: 0.03;
   stroke-dasharray: 0.15 0.12;
   pointer-events: none;
+  transition:
+    stroke 0.15s,
+    fill 0.15s;
+}
+
+.twist-zone.active {
+  fill: rgb(255 255 255 / 0.06);
+  stroke: rgb(255 255 255 / 0.5);
 }
 
 /* joined pieces: a soft glowing seam you can grab to move the whole group */
@@ -344,7 +353,15 @@ button.primary:hover:not(:disabled) {
   cursor: pointer;
   transform-box: fill-box;
   transform-origin: center;
+  /* translucent so the pieces underneath stay visible; solid when you reach for one */
+  opacity: 0.6;
+  transition: opacity 0.15s;
   animation: pop-in 0.18s cubic-bezier(0.3, 1.6, 0.5, 1);
+}
+
+.piece-actions .action:hover,
+.piece-actions .action:active {
+  opacity: 1;
 }
 
 .piece-actions circle {

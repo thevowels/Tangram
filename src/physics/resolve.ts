@@ -1,5 +1,5 @@
 import { piecePolygon, type PieceState } from "../geometry/pieces";
-import { bounds, centroid, len, mtv, pointInLoops, sharedEdges, sub, type Poly, type Vec } from "../geometry/polygon";
+import { bounds, centroid, cornerJoints, len, mtv, pointInLoops, sharedEdges, sub, type Poly, type Vec } from "../geometry/polygon";
 
 export interface Board {
   width: number;
@@ -58,6 +58,8 @@ export function lockedIds(pieces: PieceState[], board: Board, exclude: Set<strin
 
 /**
  * Group index for each piece: pieces joined edge-to-edge (transitively) share a group.
+ * Joined means a flush, parallel stretch of edge that also meets at a shared corner
+ * (`cornerJoints`); pieces slid partway along each other stay separate.
  * Pieces in `exclude` never join anything (each keeps its own index).
  */
 export function stickyGroups(
@@ -71,7 +73,7 @@ export function stickyGroups(
     if (exclude.has(pieces[i].id)) continue;
     for (let j = i + 1; j < pieces.length; j++) {
       if (exclude.has(pieces[j].id) || find(i) === find(j)) continue;
-      if (sharedEdges(polys[i], polys[j], STICK_TOL, STICK_MIN_LENGTH).length) parent[find(j)] = find(i);
+      if (cornerJoints(polys[i], polys[j], STICK_TOL, STICK_MIN_LENGTH).length) parent[find(j)] = find(i);
     }
   }
   return pieces.map((_, i) => find(i));
