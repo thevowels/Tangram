@@ -101,8 +101,8 @@ Any arrangement whose shape matches the silhouette wins.
 **On solve, pieces click into place** (`perfectFit` in `check.ts`, called from `PuzzlePlay`'s check), so the finished figure, and its exported image, is a gap-free 100%:
 - **Matching:** each piece goes to the nearest slot in the puzzle's stored `solution` with the same kind *and the same outline*, within `MAX_FIT_DISTANCE`.
   - Compare geometry, not `rot`. The two large (and two small) triangles have different base orientations, so equal outlines can have different `rot` values. A piece keeps its own rot/flip and only moves.
-- **Where the slots go:** the slots are placed where the figure was built, or exactly on the silhouette when the pieces are within `SNAP_TO_OUTLINE` of it.
-- **Fallback:** if the arrangement doesn't match the stored solution (an alternative solution), `settleFlush` snaps pieces flush to close the gaps instead.
+- **Where the figure ends up:** pieces are matched against slots around their own centre (wherever the figure was built), then the result is placed **on the drawn silhouette** (`outlineAt` = `layout.target`). A figure finished anywhere glides onto the outline, so exports are always framed on it. `.piece.solved` has a longer transform transition for this move.
+- **Fallback:** if the arrangement doesn't match the stored solution (an alternative solution), `settleFlush` snaps pieces flush to close the gaps, and `centreOn` moves the whole figure onto the outline.
 - **Animation:** the CSS transform transition makes the pieces glide in.
 
 **Puzzle authoring** (`scripts/figures.ts` → `scripts/build-puzzles.ts` → `src/data/puzzles.json`):
@@ -121,7 +121,10 @@ Any arrangement whose shape matches the silhouette wins.
 
 **Image export** (`src/exportImage.ts`, `exportBoardImage`):
 - Both modes export the board through this module.
-- **What it renders:** it clones the live SVG and strips UI-only overlays (`UI_ONLY`: joints, rotation ring, buttons, flashes, group outline). Styles that live in CSS (pieces, `.guide`) are re-applied as attributes, because a standalone SVG image doesn't get the page's stylesheet. It adds a gradient backdrop and an optional caption, then rasterises at ≥ `PX_PER_UNIT` with a long side ≥ `MIN_LONG_SIDE`.
+- **What it renders:** it clones the live SVG and strips UI-only overlays (`UI_ONLY`: joints, rotation ring, buttons, flashes, group outline). Styles that live in CSS (pieces, `.guide`) are re-applied as attributes, because a standalone SVG image doesn't get the page's stylesheet. It paints a rich backdrop (`paintBackdrop`: gradient, colour glows, dot texture, vignette) and an optional caption. Pieces get **no shadows**, because a piece's shadow falls on its neighbours as dark bands along inner edges.
+- **No light outlines in pictures or on a solved figure:** pieces get a hair-thin stroke in their *own* fill colour, which hides anti-aliasing seams without drawing a line. On screen this is an inline `stroke` style plus `.piece.solved`, because inline style beats the stylesheet's `.piece` stroke.
+- **Resolution:** it rasterises at ≥ `PX_PER_UNIT` px/unit and a long side ≥ `MIN_LONG_SIDE`, capped by `MAX_LONG_SIDE` / `MAX_PIXELS`. The caps exist because iOS Safari fails on huge canvases.
+- **Format:** JPEG at `JPEG_QUALITY`, because PNG of the glow backdrop runs to several MB (≈4 MB versus ≈0.3 MB for the same 2048px image).
 - **Free play** exports the whole board.
 - **Puzzle mode** (toolbar **Export**, plus **Save image** on the solved card) crops to the silhouette and pieces, captioned "Solved in m:ss" or "In progress · N% matched".
 - **Delivery:** on touch devices that can share files it opens the share sheet; otherwise it downloads.

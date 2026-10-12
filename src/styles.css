@@ -336,13 +336,16 @@ button.primary:hover:not(:disabled) {
 }
 
 .piece.solved {
-  stroke: rgb(255 255 255 / 0.6);
+  /* stroke colour comes inline (the piece's own fill): no white edges on a finished figure */
+  stroke-width: 0.02;
+  /* a finished figure may glide across the board onto the outline: let it travel smoothly */
+  transition: transform 0.55s cubic-bezier(0.25, 1, 0.35, 1);
   animation: glow 1.6s ease-in-out infinite alternate;
 }
 
 @keyframes glow {
   from {
-    filter: drop-shadow(0 0 0.05px rgb(255 255 255 / 0.3));
+    filter: drop-shadow(0 0 0.05px rgb(255 214 120 / 0.25));
   }
   to {
     filter: drop-shadow(0 0 0.25px rgb(255 214 120 / 0.8));

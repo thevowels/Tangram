@@ -521,7 +521,11 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
               (solved ? " solved" : "")
             }
             d={toPath([def.shape])}
-            style={{ transform: `translate(${p.x}px, ${p.y}px) scaleX(${sx}) rotate(${angles.get(p.id)}deg)` }}
+            style={{
+              transform: `translate(${p.x}px, ${p.y}px) scaleX(${sx}) rotate(${angles.get(p.id)}deg)`,
+              // solved: no light outline; a hair of the piece's own colour hides the seams
+              ...(solved ? { stroke: `url(#tan-${p.id})` } : {}),
+            }}
             fill={`url(#tan-${p.id})`}
             onPointerDown={(e) => onPieceDown(e, p.id)}
           />
