@@ -76,6 +76,10 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
   - Pieces slid partway along each other, or touching only at a corner or tip, do **not** join.
   - Outline locking (`isLocked`) deliberately still uses plain `sharedEdges()`, because a correctly placed piece can sit mid-way along the silhouette's border.
   - Collisions shift a whole group rigidly, and board clamping is per group, so bumping a built figure never breaks it apart.
+- **Pulling into exact spots** (`slotSnap` in `check.ts`): `PuzzlePlay` passes `slots`, the puzzle's `solution` placed on the outline, to `Board` and `usePieces`.
+  - After every drop, finished dial or twist (`snapAfter` in `Board`), and after rotate/flip (`usePieces`), a piece with the **same outline** as a free spot within `SLOT_SNAP_DISTANCE` (0.25) moves exactly into it. The two identical large or small triangles are matched by geometry.
+  - A group moves by one shared offset, and only if every member lands on a free spot.
+  - It takes priority over the normal edge/vertex snap (`SNAP_DISTANCE` 0.2). This is what makes detailed outlines (e.g. the Fox) easy to align.
 - **Locking to the outline:** in puzzles the physics board carries `outline`, the placed silhouette. `usePieces` builds `{ ...layout.board, outline }`.
   - `isLocked()`: a piece is locked when it sits inside the silhouette with an edge flush against its border.
   - `lockedIds()`: locked pieces plus everything joined to them.
