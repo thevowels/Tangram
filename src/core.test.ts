@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { PIECES, piecePolygon, pieceTransform, squareLayout, type PieceState } from "./geometry/pieces";
-import { area, mtv, sharedEdges, type Poly } from "./geometry/polygon";
+import { area, cornerJoints, mtv, sharedEdges, type Poly } from "./geometry/polygon";
 import { findSnap } from "./geometry/snap";
 import { groupOf, hasOverlap, isLocked, moveWithPush, transformWithPush } from "./physics/resolve";
 import { coverage, type Puzzle } from "./game/check";
@@ -71,14 +71,36 @@ describe("push physics", () => {
     expect(hasOverlap(after)).toBe(false);
   });
 
-  it("a corner-to-corner touch does not join pieces", () => {
+  it("only flush edges that also meet at a corner join pieces", () => {
     const a: Poly = [[0, 0], [1, 0], [1, 1], [0, 1]];
-    const corner: Poly = [[1, 1], [2, 1], [2, 2], [1, 2]];
-    const flush: Poly = [[1, 0.5], [2, 0.5], [2, 1.5], [1, 1.5]];
-    expect(sharedEdges(a, corner)).toHaveLength(0);
-    const shared = sharedEdges(a, flush);
-    expect(shared).toHaveLength(1);
-    expect(Math.hypot(shared[0][1][0] - shared[0][0][0], shared[0][1][1] - shared[0][0][1])).toBeCloseTo(0.5, 9);
+    const cornerOnly: Poly = [[1, 1], [2, 1], [2, 2], [1, 2]]; // touches at a point
+    const slid: Poly = [[1, 0.5], [2, 0.5], [2, 1.5], [1, 1.5]]; // flush, corners don't meet
+    const aligned: Poly = [[1, 0], [2, 0], [2, 1], [1, 1]]; // flush, corners meet
+    const half: Poly = [[1, 0], [1.5, 0], [1, 0.5]]; // shorter edge starting at a shared corner
+    expect(cornerJoints(a, cornerOnly)).toHaveLength(0);
+    expect(sharedEdges(a, slid)).toHaveLength(1);
+    expect(cornerJoints(a, slid)).toHaveLength(0);
+    expect(cornerJoints(a, aligned)).toHaveLength(1);
+    expect(cornerJoints(a, half)).toHaveLength(1);
+  });
+
+  it("pieces slid partway along each other are pushed separately", () => {
+    const sq = { id: "SQ", x: 6, y: 5, rot: 45, flipped: false }; // axis-aligned unit square
+    const right = piecePolygon(sq).reduce((m, p) => Math.max(m, p[0]), -Infinity);
+    const other = { id: "S1", x: 0, y: 0, rot: 0, flipped: true }; // vertical leg on its left
+    // put the small triangle's vertical leg against the square's right side, shifted down 0.4
+    const poly = piecePolygon(other);
+    const minX = Math.min(...poly.map((p) => p[0]));
+    const minY = Math.min(...poly.map((p) => p[1]));
+    const top = Math.min(...piecePolygon(sq).map((p) => p[1]));
+    const slid = { ...other, x: right - minX, y: top + 0.4 - minY };
+    // flush along a parallel edge (the old rule would have joined them)...
+    expect(sharedEdges(piecePolygon(sq), piecePolygon(slid)).length).toBeGreaterThan(0);
+    // ...but no shared corner, so they stay separate
+    expect(groupOf([sq, slid], "SQ")).toEqual(["SQ"]);
+    // aligned to the square's top corner, they join
+    const aligned = { ...slid, y: top - minY };
+    expect(new Set(groupOf([sq, aligned], "SQ"))).toEqual(new Set(["SQ", "S1"]));
   });
 
   it("a whole group can be dragged rigidly", () => {

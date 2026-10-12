@@ -1,6 +1,6 @@
 import { forwardRef, useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import { PIECE_BY_ID, PIECES, piecePolygon, pieceTransform, type PieceState } from "../geometry/pieces";
-import { bounds, groupCentroid, sharedEdges, toPath, type Poly, type Vec } from "../geometry/polygon";
+import { bounds, cornerJoints, groupCentroid, toPath, type Poly, type Vec } from "../geometry/polygon";
 import { snap, turnBy } from "../game/actions";
 import {
   lockedIds,
@@ -47,6 +47,30 @@ interface Twist {
   applied: number; // 45° steps applied so far
 }
 
+/** Two fingers twisting the selection in place (neither of them dragging it). */
+interface FreeTwist {
+  ids: string[];
+  fingers: Map<number, Vec>;
+  startAngle: number;
+  applied: number; // 45° steps applied so far
+}
+
+/** A finger resting near the selection, waiting to see whether a second one joins it. */
+interface Pending {
+  pointerId: number;
+  at: Vec;
+  startTime: number;
+}
+
+/** One finger circling inside the zone: the selection turns to follow it, like a joystick. */
+interface Dial {
+  pointerId: number;
+  ids: string[];
+  centre: Vec;
+  startAngle: number;
+  applied: number; // 45° steps applied so far
+}
+
 /** A stretch of edge shared by two joined pieces. */
 interface Joint {
   a: Vec;
@@ -59,6 +83,10 @@ const TAP_TIME = 300;
 const TAP_PX = 6; // movement under this many screen px still counts as a tap
 const BUTTON_PX = 22; // radius of the floating action buttons on screen
 const JOINT_HIT_PX = { touch: 22, mouse: 12 }; // grab width of a joint line on screen
+/** How far around the selection a finger may land and still twist it. */
+const ZONE_MARGIN = { units: 0.9, px: 56 };
+/** A dial finger this close to the centre has no meaningful angle; ignore it until it moves out. */
+const DIAL_DEAD_ZONE = 0.35;
 
 const buzz = (ms: number) => navigator.vibrate?.(ms);
 const angleOf = (a: Vec, b: Vec) => (Math.atan2(b[1] - a[1], b[0] - a[0]) * 180) / Math.PI;
@@ -97,7 +125,7 @@ function findJoints(pieces: PieceState[]): Joint[] {
   const joints: Joint[] = [];
   for (let i = 0; i < pieces.length; i++) {
     for (let j = i + 1; j < pieces.length; j++) {
-      for (const [a, b] of sharedEdges(polys[i], polys[j], STICK_TOL, STICK_MIN_LENGTH)) {
+      for (const [a, b] of cornerJoints(polys[i], polys[j], STICK_TOL, STICK_MIN_LENGTH)) {
         const members = pieces.filter((_, k) => group[k] === group[i]).map((p) => p.id);
         joints.push({ a, b, piece: pieces[i].id, group: members });
       }
@@ -115,6 +143,9 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
   piecesRef.current = pieces;
   const drag = useRef<Drag | null>(null);
   const twist = useRef<Twist | null>(null);
+  const freeTwist = useRef<FreeTwist | null>(null);
+  const pending = useRef<Pending | null>(null);
+  const dial = useRef<Dial | null>(null);
   const [dragging, setDragging] = useState<string[]>([]);
   const [twisting, setTwisting] = useState(false);
   const [hoverGroup, setHoverGroup] = useState<string[]>([]);
@@ -158,11 +189,81 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
     }
   };
 
+  /** The circle around some pieces inside which a second finger counts as twisting them. */
+  const zoneOf = (ids: string[]) => {
+    const polys = piecesRef.current.filter((p) => ids.includes(p.id)).map(piecePolygon);
+    if (!polys.length) return null;
+    const c = groupCentroid(polys);
+    const reach = Math.max(...polys.flat().map(([x, y]) => Math.hypot(x - c[0], y - c[1])));
+    return { c, r: reach + Math.max(ZONE_MARGIN.units, ZONE_MARGIN.px / unitPx) };
+  };
+  const inZone = (ids: string[], w: Vec) => {
+    const z = zoneOf(ids);
+    return !!z && Math.hypot(w[0] - z.c[0], w[1] - z.c[1]) <= z.r;
+  };
+
+  /** Two fingers near the selection: rotate it in place as they turn. */
+  const startFreeTwist = (first: Pending, e: PointerEvent) => {
+    const w = toWorld(e);
+    capture(e);
+    pending.current = null;
+    freeTwist.current = {
+      ids: selected,
+      fingers: new Map([
+        [first.pointerId, first.at],
+        [e.pointerId, w],
+      ]),
+      startAngle: angleOf(first.at, w),
+      applied: 0,
+    };
+    setDragging(selected);
+    setTwisting(true);
+  };
+
+  const applyFreeTwist = () => {
+    const t = freeTwist.current;
+    if (!t) return;
+    const [a, b] = [...t.fingers.values()];
+    const steps = Math.round(wrap180(angleOf(a, b) - t.startAngle) / 45);
+    if (steps === t.applied) return;
+    const next = turnBy(piecesRef.current, t.ids, (steps - t.applied) * 45, board);
+    if (!next) return;
+    t.applied = steps;
+    piecesRef.current = next;
+    onChange(next);
+    buzz(5);
+  };
+
+  /** The resting finger started moving: turn it into a one-finger rotation dial. */
+  const startDial = (p: Pending, w: Vec) => {
+    const z = zoneOf(selected);
+    if (!z) return;
+    pending.current = null;
+    dial.current = { pointerId: p.pointerId, ids: selected, centre: z.c, startAngle: angleOf(z.c, p.at), applied: 0 };
+    setDragging(selected);
+    setTwisting(true);
+    applyDial(w);
+  };
+
+  const applyDial = (w: Vec) => {
+    const d = dial.current;
+    if (!d || Math.hypot(w[0] - d.centre[0], w[1] - d.centre[1]) < DIAL_DEAD_ZONE) return;
+    const steps = Math.round(wrap180(angleOf(d.centre, w) - d.startAngle) / 45);
+    if (steps === d.applied) return;
+    const next = turnBy(piecesRef.current, d.ids, (steps - d.applied) * 45, board);
+    if (!next) return;
+    d.applied = steps;
+    piecesRef.current = next;
+    onChange(next);
+    buzz(5);
+  };
+
   /** Second finger down while dragging: twist the piece(s) around the first finger. */
   const startTwist = (e: PointerEvent) => {
     const d = drag.current!;
     if (twist.current || e.pointerId === d.pointerId) return;
     const w = toWorld(e);
+    if (!inZone(d.ids, w)) return; // only fingers near the piece count
     capture(e);
     twist.current = { pointerId: e.pointerId, at: w, startAngle: angleOf(d.at, w), applied: 0 };
     d.moved = true;
@@ -205,28 +306,74 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
     onSelect(ids);
   };
 
+  /**
+   * A finger that lands while another is already busy: twist (if it's near the selection)
+   * rather than start a second, competing gesture. Returns true if it was handled.
+   */
+  const secondFinger = (e: PointerEvent) => {
+    if (freeTwist.current || dial.current) return true;
+    if (drag.current) {
+      startTwist(e);
+      return true;
+    }
+    if (pending.current && pending.current.pointerId !== e.pointerId && inZone(selected, toWorld(e))) {
+      startFreeTwist(pending.current, e);
+      return true;
+    }
+    return false;
+  };
+
   /** Pressing a piece moves just that piece (pulling it out of any group). */
   const onPieceDown = (e: PointerEvent, id: string) => {
     if (solved) return;
     e.stopPropagation();
-    if (drag.current) startTwist(e);
-    else startDrag(e, [id]);
+    if (secondFinger(e)) return;
+    pending.current = null;
+    startDrag(e, [id]);
   };
 
   /** Pressing a joint line moves the whole joined group. */
   const onJointDown = (e: PointerEvent, j: Joint) => {
     if (solved) return;
     e.stopPropagation();
-    if (drag.current) startTwist(e);
-    else startDrag(e, [j.piece, ...j.group.filter((id) => id !== j.piece)]);
+    if (secondFinger(e)) return;
+    pending.current = null;
+    startDrag(e, [j.piece, ...j.group.filter((id) => id !== j.piece)]);
   };
 
+  /**
+   * Empty space: near the selection, a finger waits for a second one to twist with;
+   * anywhere else (or a lone tap) clears the selection.
+   */
   const onBoardDown = (e: PointerEvent) => {
-    if (drag.current) startTwist(e);
-    else onSelect([]);
+    if (secondFinger(e)) return;
+    const w = toWorld(e);
+    if (!solved && selected.length && inZone(selected, w)) {
+      capture(e);
+      pending.current = { pointerId: e.pointerId, at: w, startTime: performance.now() };
+    } else {
+      onSelect([]);
+    }
   };
 
   const onMove = (e: PointerEvent) => {
+    const ft = freeTwist.current;
+    if (ft?.fingers.has(e.pointerId)) {
+      ft.fingers.set(e.pointerId, toWorld(e));
+      applyFreeTwist();
+      return;
+    }
+    if (dial.current?.pointerId === e.pointerId) {
+      applyDial(toWorld(e));
+      return;
+    }
+    const pd = pending.current;
+    if (pd?.pointerId === e.pointerId) {
+      const w = toWorld(e);
+      // moved enough to mean it: the finger becomes a rotation dial
+      if (Math.hypot(w[0] - pd.at[0], w[1] - pd.at[1]) * unitPx >= TAP_PX) startDial(pd, w);
+      return;
+    }
     const d = drag.current;
     if (!d) return;
     const w = toWorld(e);
@@ -249,6 +396,38 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
   };
 
   const onUp = (e: PointerEvent) => {
+    const ft = freeTwist.current;
+    if (ft?.fingers.has(e.pointerId)) {
+      // either finger lifted: the twist is over
+      freeTwist.current = null;
+      setTwisting(false);
+      setDragging([]);
+      if (ft.applied) {
+        const snapped = snap(piecesRef.current, ft.ids, guide ?? [], board);
+        if (snapped) piecesRef.current = snapped.pieces;
+        onSettle(piecesRef.current);
+      }
+      return;
+    }
+    const dl = dial.current;
+    if (dl?.pointerId === e.pointerId) {
+      dial.current = null;
+      setTwisting(false);
+      setDragging([]);
+      if (dl.applied) {
+        const snapped = snap(piecesRef.current, dl.ids, guide ?? [], board);
+        if (snapped) piecesRef.current = snapped.pieces;
+        onSettle(piecesRef.current);
+      }
+      return;
+    }
+    const p = pending.current;
+    if (p?.pointerId === e.pointerId) {
+      // a lone tap near (not on) the selection: treat it like tapping empty space
+      pending.current = null;
+      if (performance.now() - p.startTime < TAP_TIME) onSelect([]);
+      return;
+    }
     if (twist.current?.pointerId === e.pointerId) {
       // second finger lifted: keep dragging with the first
       twist.current = null;
@@ -353,9 +532,10 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
           ))}
         </g>
       )}
-      {twisting && dragging.length > 0 && (() => {
-        const [cx, cy] = groupCentroid(pieces.filter((q) => dragging.includes(q.id)).map(piecePolygon));
-        return <circle className="twist-ring" cx={cx} cy={cy} r={dragging.length > 1 ? 2.6 : 1.7} />;
+      {!solved && (touch || twisting) && (() => {
+        const ids = dragging.length ? dragging : selected;
+        const z = ids.length ? zoneOf(ids) : null;
+        return z && <circle className={"twist-zone" + (twisting ? " active" : "")} cx={z.c[0]} cy={z.c[1]} r={z.r} />;
       })()}
       {selPieces.length > 0 && (
         <PieceActions

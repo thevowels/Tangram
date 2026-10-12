@@ -174,3 +174,15 @@ export function groupCentroid(polys: Poly[]): Vec {
   }
   return [ax / total, ay / total];
 }
+
+/**
+ * Shared edges that also meet at a corner: at least one end of the flush stretch is a vertex
+ * of both polygons, so together they form a clean new corner or a straight continued edge.
+ * Pieces merely slid partway along each other don't qualify.
+ */
+export function cornerJoints(a: Poly, b: Poly, tol = 0.02, minLen = 0.1): [Vec, Vec][] {
+  const isVertex = (poly: Poly, p: Vec) => poly.some((v) => Math.hypot(v[0] - p[0], v[1] - p[1]) <= tol);
+  return sharedEdges(a, b, tol, minLen).filter(([p, q]) =>
+    [p, q].some((end) => isVertex(a, end) && isVertex(b, end)),
+  );
+}
