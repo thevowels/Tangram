@@ -5,6 +5,7 @@ import { Logo } from "./components/Logo";
 import { formatTime, PuzzlePicker } from "./components/PuzzlePicker";
 import { Toolbar } from "./components/Toolbar";
 import { JointTip } from "./components/Tip";
+import { exportBoardImage } from "./exportImage";
 import { flip, rotate } from "./game/actions";
 import { evaluate, type Puzzle } from "./game/check";
 import {
@@ -18,8 +19,8 @@ import {
   type Extent,
   type Layout,
 } from "./game/layout";
-import type { PieceState } from "./geometry/pieces";
-import type { Poly } from "./geometry/polygon";
+import { piecePolygon, type PieceState } from "./geometry/pieces";
+import { bounds, type Poly } from "./geometry/polygon";
 import { loadDesigns, loadSolved, saveDesigns, saveSolved, type Design } from "./storage";
 import puzzlesJson from "./data/puzzles.json";
 
@@ -185,40 +186,7 @@ function FreePlay() {
   };
 
   const exportPng = () => {
-    const svg = svgRef.current;
-    if (!svg || !layout) return;
-    const { width, height } = layout.board;
-    const clone = svg.cloneNode(true) as SVGSVGElement;
-    clone.querySelectorAll(".snap-flash, .piece-actions").forEach((n) => n.remove());
-    const bg = document.createElementNS("http://www.w3.org/2000/svg", "rect");
-    Object.entries({ width: String(width), height: String(height), fill: "#1a1240" }).forEach(([k, v]) =>
-      bg.setAttribute(k, v),
-    );
-    clone.insertBefore(bg, clone.firstChild);
-    clone.querySelectorAll(".piece").forEach((n) => {
-      n.removeAttribute("class");
-      n.setAttribute("stroke", "rgba(255,255,255,0.35)");
-      n.setAttribute("stroke-width", "0.03");
-    });
-    const scale = 80;
-    clone.setAttribute("width", String(width * scale));
-    clone.setAttribute("height", String(height * scale));
-    const url = URL.createObjectURL(
-      new Blob([new XMLSerializer().serializeToString(clone)], { type: "image/svg+xml" }),
-    );
-    const img = new Image();
-    img.onload = () => {
-      const canvas = document.createElement("canvas");
-      canvas.width = width * scale;
-      canvas.height = height * scale;
-      canvas.getContext("2d")!.drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      const a = document.createElement("a");
-      a.download = "tangram.png";
-      a.href = canvas.toDataURL("image/png");
-      a.click();
-    };
-    img.src = url;
+    if (svgRef.current && layout) void exportBoardImage(svgRef.current, layout.board, { filename: "tangram.png" });
   };
 
   return (
@@ -280,6 +248,7 @@ function PuzzlePlay({
   onBack(): void;
 }) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
   const figure = useMemo(() => figureExtent(puzzle.polygons), [puzzle]);
   const layout = useFitLayout(stageRef, figure);
   const guide = useMemo(
@@ -315,6 +284,21 @@ function PuzzlePlay({
   const g = usePieces(layout, trayLayout, check, true, guide ?? undefined);
   const pct = Math.round(match * 100);
 
+  /** Save the figure (and the pieces around it) as an image, captioned with the puzzle. */
+  const exportPng = () => {
+    if (!svgRef.current || !layout || !guide || !g.pieces) return;
+    const b = bounds([...guide, ...g.pieces.map(piecePolygon)]);
+    const pad = 0.5;
+    void exportBoardImage(svgRef.current, layout.board, {
+      filename: `tangram-${puzzle.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`,
+      crop: { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad },
+      caption: {
+        title: puzzle.name,
+        subtitle: solvedIn !== null ? `Solved in ${formatTime(solvedIn)}` : `In progress · ${pct}% matched`,
+      },
+    });
+  };
+
   return (
     <>
       <div className="play-header">
@@ -331,7 +315,7 @@ function PuzzlePlay({
         </span>
       </div>
       <div className="stage" ref={stageRef}>
-        {g.boardProps && guide && <Board {...g.boardProps} guide={guide} solved={solvedIn !== null} />}
+        {g.boardProps && guide && <Board ref={svgRef} {...g.boardProps} guide={guide} solved={solvedIn !== null} />}
         <JointTip />
         {solvedIn !== null && (
           <div className="success">
@@ -344,6 +328,9 @@ function PuzzlePlay({
               <div>
                 <button className="primary" onClick={onNext}>
                   Next puzzle →
+                </button>
+                <button onClick={exportPng}>
+                  <span aria-hidden>⤓</span> Save image
                 </button>
                 <button onClick={onBack}>All puzzles</button>
               </div>
@@ -359,7 +346,11 @@ function PuzzlePlay({
           if (layout) g.reset(trayLayout(layout));
           setMatch(0);
         }}
-      />
+      >
+        <button onClick={exportPng}>
+          <span aria-hidden>⤓</span> Export
+        </button>
+      </Toolbar>
     </>
   );
 }

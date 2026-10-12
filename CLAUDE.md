@@ -112,6 +112,14 @@ No per-puzzle solution data exists. Any arrangement whose shape matches the silh
 - **Tests:** the `puzzles` tests check every stored solution covers its outline at >99%.
 - **Checking new figures:** always look at `scripts/out/preview.png` after adding one.
 
+**Image export** (`src/exportImage.ts`, `exportBoardImage`):
+- Both modes export the board through this module.
+- **What it renders:** it clones the live SVG and strips UI-only overlays (`UI_ONLY`: joints, rotation ring, buttons, flashes, group outline). Styles that live in CSS (pieces, `.guide`) are re-applied as attributes, because a standalone SVG image doesn't get the page's stylesheet. It adds a gradient backdrop and an optional caption, then rasterises at ≥ `PX_PER_UNIT` with a long side ≥ `MIN_LONG_SIDE`.
+- **Free play** exports the whole board.
+- **Puzzle mode** (toolbar **Export**, plus **Save image** on the solved card) crops to the silhouette and pieces, captioned "Solved in m:ss" or "In progress · N% matched".
+- **Delivery:** on touch devices that can share files it opens the share sheet; otherwise it downloads.
+- If you add a new overlay to `Board`, add its class to `UI_ONLY`.
+
 **State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage only (`src/storage.ts`).
 
 **Interaction model** (designed for touch first). The selection is a `string[]`: one piece, or a whole joined group.
