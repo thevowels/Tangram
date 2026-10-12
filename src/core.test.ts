@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { PIECES, piecePolygon, pieceTransform, squareLayout, type PieceState } from "./geometry/pieces";
-import { area, bounds, cornerJoints, mtv, sharedEdges, type Poly } from "./geometry/polygon";
+import { area, bounds, cornerJoints, groupCentroid, mtv, sharedEdges, type Poly } from "./geometry/polygon";
 import { findSnap } from "./geometry/snap";
 import { groupOf, hasOverlap, isLocked, moveWithPush, transformWithPush } from "./physics/resolve";
-import { coverage, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
+import { centreOn, coverage, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
 import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
@@ -383,6 +383,30 @@ describe("solving clicks every piece into its exact place", () => {
       expect(q.x).toBeCloseTo(s.x + at[0], 9);
       expect(q.y).toBeCloseTo(s.y + at[1], 9);
     });
+  });
+
+  it("a figure finished far from the outline is moved exactly onto it", () => {
+    const cat = puzzles.find((q) => q.name === "Cat")!;
+    const outlineAt: [number, number] = [5, 5];
+    const elsewhere = cat.solution.map((s) => ({ ...s, x: s.x + 14, y: s.y + 7.3 }));
+    const exact = perfectFit(elsewhere, cat.solution, outlineAt)!;
+    expect(exact).not.toBeNull();
+    exact.forEach((q) => {
+      const s = cat.solution.find((t) => t.id === q.id)!;
+      expect(q.x).toBeCloseTo(s.x + outlineAt[0], 9);
+      expect(q.y).toBeCloseTo(s.y + outlineAt[1], 9);
+    });
+  });
+
+  it("the fallback can centre a whole figure on the outline", () => {
+    const sq = squareLayout([12, 6]);
+    const moved = centreOn(sq, [3, 4]);
+    const c = groupCentroid(moved.map(piecePolygon));
+    expect(c[0]).toBeCloseTo(3, 9);
+    expect(c[1]).toBeCloseTo(4, 9);
+    // a rigid move: shape unchanged
+    moved.forEach((q, i) => expect(q.rot).toBe(sq[i].rot));
+    expect(hasOverlap(moved)).toBe(false);
   });
 
   it("doesn't force an unrelated arrangement onto a solution", () => {

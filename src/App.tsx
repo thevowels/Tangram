@@ -7,7 +7,7 @@ import { Toolbar } from "./components/Toolbar";
 import { JointTip } from "./components/Tip";
 import { exportBoardImage } from "./exportImage";
 import { flip, rotate } from "./game/actions";
-import { evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
+import { centreOn, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
 import {
   figureExtent,
   fitLayout,
@@ -186,7 +186,7 @@ function FreePlay() {
   };
 
   const exportPng = () => {
-    if (svgRef.current && layout) void exportBoardImage(svgRef.current, layout.board, { filename: "tangram.png" });
+    if (svgRef.current && layout) void exportBoardImage(svgRef.current, layout.board, { filename: "tangram.jpg" });
   };
 
   return (
@@ -276,8 +276,10 @@ function PuzzlePlay({
       setMatch(match);
       if (solved) {
         // close the last little gaps: every piece clicks into its exact place (100% match)
+        // ...and wherever it was built, the finished figure glides onto the outline
         const exact = perfectFit(pieces, puzzle.solution, layout?.target);
-        replacePieces.current(exact ?? settleFlush(pieces, guide));
+        const flush = exact ? null : settleFlush(pieces, guide);
+        replacePieces.current(exact ?? (layout ? centreOn(flush!, layout.target) : flush!));
         if (exact) setMatch(1); // exact geometry: a true 100%
         const ms = performance.now() - start.current;
         setSolvedIn(ms);
@@ -298,7 +300,7 @@ function PuzzlePlay({
     const b = bounds([...guide, ...g.pieces.map(piecePolygon)]);
     const pad = 0.5;
     void exportBoardImage(svgRef.current, layout.board, {
-      filename: `tangram-${puzzle.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`,
+      filename: `tangram-${puzzle.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.jpg`,
       crop: { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad },
       caption: {
         title: puzzle.name,

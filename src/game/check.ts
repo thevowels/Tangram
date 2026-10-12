@@ -87,8 +87,6 @@ export function evaluate(pieces: PieceState[], placedSilhouette: Poly[]) {
 
 /** How far a piece may sit from its exact slot and still be pulled into it on solve. */
 const MAX_FIT_DISTANCE = 0.8;
-/** A finished figure this close to the drawn silhouette lands exactly on it. */
-const SNAP_TO_OUTLINE = 0.5;
 
 const shapeKey = (s: PieceState) => {
   const p = piecePolygon(s);
@@ -102,19 +100,21 @@ const sameShape = (a: number[][], b: number[][]) =>
  * Snap a solved-but-slightly-off arrangement onto the puzzle's exact solution, so the figure
  * is a perfect match with no gaps. Each piece goes to the nearest solution slot of the same
  * shape and orientation (so the two large / two small triangles are interchangeable), with
- * the slots placed where the pieces actually are (the figure may be built anywhere), or exactly
- * on the silhouette when it was built on it.
+ * the slots placed on the drawn silhouette (`outlineAt`): a figure finished anywhere on the
+ * board glides onto the outline. Without `outlineAt` the slots stay where the pieces are.
  * Returns null if the pieces don't correspond to this solution (e.g. an alternative one).
  */
 export function perfectFit(
   pieces: PieceState[],
   solution: PieceState[],
-  /** Where the silhouette is drawn: a figure built (nearly) on it snaps exactly onto it. */
+  /** Where the silhouette is drawn: the finished figure is placed exactly on it. */
   outlineAt?: [number, number],
 ): PieceState[] | null {
-  let [cx, cy] = groupCentroid(pieces.map(piecePolygon));
-  if (outlineAt && Math.hypot(cx - outlineAt[0], cy - outlineAt[1]) < SNAP_TO_OUTLINE) [cx, cy] = outlineAt;
-  const slots = solution.map((s) => ({ ...s, x: s.x + cx, y: s.y + cy }));
+  // match against slots around the pieces' own centre (wherever the figure was built)...
+  const [gx, gy] = groupCentroid(pieces.map(piecePolygon));
+  // ...but place the result on the outline
+  const [cx, cy] = outlineAt ?? [gx, gy];
+  const slots = solution.map((s) => ({ ...s, x: s.x + gx, y: s.y + gy }));
   const pairs: { piece: number; slot: number; d: number }[] = [];
   pieces.forEach((p, i) => {
     const shape = shapeKey(p);
@@ -138,7 +138,7 @@ export function perfectFit(
   // same outline, so only the position changes (state x/y is the piece's centroid)
   return pieces.map((p, i) => {
     const s = slots[slotOf.get(i)!];
-    return { ...p, x: s.x, y: s.y };
+    return { ...p, x: s.x - gx + cx, y: s.y - gy + cy };
   });
 }
 
@@ -163,4 +163,14 @@ export function settleFlush(pieces: PieceState[], outline: Poly[], passes = 4): 
     if (!moved) break;
   }
   return state;
+}
+
+/**
+ * Move a whole finished figure, rigidly, so its centre sits at `at` (used to bring a figure
+ * that was built away from the outline onto it; all seven pieces are in the figure, so the
+ * outline area is free).
+ */
+export function centreOn(pieces: PieceState[], at: [number, number]): PieceState[] {
+  const [cx, cy] = groupCentroid(pieces.map(piecePolygon));
+  return pieces.map((p) => ({ ...p, x: p.x + at[0] - cx, y: p.y + at[1] - cy }));
 }
