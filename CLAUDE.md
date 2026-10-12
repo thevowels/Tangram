@@ -137,6 +137,11 @@ Any arrangement whose shape matches the silhouette wins.
 - **Free play** exports the whole board.
 - **Puzzle mode** (toolbar **Export**, plus **Save image** on the solved card) crops to the silhouette and pieces, captioned "Solved in m:ss" or "In progress · N% matched".
 - **Delivery:** on touch devices that can share files it opens the share sheet; otherwise it downloads.
+- **Link and QR:** exports carry `link` (`puzzleLink(id)` for puzzles, `SITE_URL` for free play, both from `src/site.ts`). It's printed as a quiet address line, and as a small dark-on-white QR tile in the caption's right corner (`qrTile`), never over the figure.
+  - The QR encoder (`qrcode-generator`) is imported dynamically, only when exporting.
+  - Captions scale with big pictures (`captionScale`) so the QR stays scannable at phone size. It's verified to decode with zbar and OpenCV down to 700px wide.
+  - With a link, narrow crops are widened to `minWidthWithLink`.
+- **Deep links:** `?p=<id>` opens a puzzle directly (`puzzleIdFromUrl`). `App` keeps the address in sync with `history.replaceState`, so the current puzzle can be shared by copying the URL.
 - If you add a new overlay to `Board`, add its class to `UI_ONLY`.
 
 **State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage only (`src/storage.ts`).

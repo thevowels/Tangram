@@ -21,7 +21,32 @@ export interface ExportOptions {
   crop?: { minX: number; minY: number; maxX: number; maxY: number };
   /** Caption drawn under the picture, e.g. the puzzle name and time. */
   caption?: { title: string; subtitle?: string };
+  /**
+   * Where the picture leads: printed as a quiet address line, and as a small QR code in the
+   * caption's corner (never over the figure), so a shared image opens the same puzzle.
+   */
+  link?: string;
 }
+
+/**
+ * Caption layout, in tan units for a typical puzzle picture. Big pictures (e.g. a whole free-play
+ * board) scale the caption up (`captionScale`) so the text stays legible and the QR stays
+ * scannable when the image is shown at phone size.
+ */
+const CAPTION = {
+  /** Band height: title + subtitle (+ address line when there's a link). */
+  height: (subtitle: boolean, link: boolean) => (link ? 1.6 : subtitle ? 1.15 : 0.8),
+  qrSize: 1.3,
+  pad: 0.2,
+  /** With a link, narrow figures are widened to this so the text and QR sit side by side. */
+  minWidthWithLink: 6,
+  /** Long side (units) up to which the caption isn't scaled. */
+  refLongSide: 7,
+  maxScale: 2.5,
+};
+
+const captionScale = (w: number, h: number) =>
+  Math.min(CAPTION.maxScale, Math.max(1, Math.max(w, h) / CAPTION.refLongSide));
 
 const set = (el: Element, attrs: Record<string, string | number>) => {
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, String(v));
@@ -37,8 +62,15 @@ const make = (tag: string, attrs: Record<string, string | number>) => {
  * image doesn't get, so the bits that matter are inlined here and UI overlays are dropped.
  */
 async function renderImage(svg: SVGSVGElement, board: Board, opts: ExportOptions): Promise<Blob> {
-  const crop = opts.crop ?? { minX: 0, minY: 0, maxX: board.width, maxY: board.height };
-  const captionH = opts.caption ? (opts.caption.subtitle ? 1.15 : 0.8) : 0;
+  const crop = { ...(opts.crop ?? { minX: 0, minY: 0, maxX: board.width, maxY: board.height }) };
+  const hasCaption = !!opts.caption || !!opts.link;
+  const k = captionScale(crop.maxX - crop.minX, crop.maxY - crop.minY);
+  const captionH = hasCaption ? CAPTION.height(!!opts.caption?.subtitle, !!opts.link) * k : 0;
+  if (opts.link && crop.maxX - crop.minX < CAPTION.minWidthWithLink) {
+    const grow = (CAPTION.minWidthWithLink - (crop.maxX - crop.minX)) / 2;
+    crop.minX -= grow;
+    crop.maxX += grow;
+  }
   const w = crop.maxX - crop.minX;
   const h = crop.maxY - crop.minY + captionH;
 
@@ -71,29 +103,44 @@ async function renderImage(svg: SVGSVGElement, board: Board, opts: ExportOptions
   const backdrop = paintBackdrop(defs, box);
   clone.insertBefore(backdrop, defs.nextSibling);
 
-  if (opts.caption) {
-    const base = { x: crop.minX + w / 2, "text-anchor": "middle", "font-family": "system-ui, sans-serif" };
-    const hot = make("linearGradient", { id: "export-title", x1: 0, y1: 0, x2: 1, y2: 0 });
-    hot.append(
-      make("stop", { offset: 0, "stop-color": "#ff6b8b" }),
-      make("stop", { offset: 0.55, "stop-color": "#ff8a3d" }),
-      make("stop", { offset: 1, "stop-color": "#ffd166" }),
-    );
-    defs.append(hot);
-    const title = make("text", {
-      ...base,
-      y: crop.maxY + 0.55,
-      "font-size": 0.42,
-      "font-weight": 900,
-      "letter-spacing": 0.01,
-      fill: "url(#export-title)",
-    });
-    title.textContent = opts.caption.title;
-    clone.append(title);
-    if (opts.caption.subtitle) {
-      const sub = make("text", { ...base, y: crop.maxY + 0.98, "font-size": 0.28, fill: "rgba(248,244,255,0.82)" });
-      sub.textContent = opts.caption.subtitle;
-      clone.append(sub);
+  if (hasCaption) {
+    // with a QR in the right corner, centre the text in the space left of it
+    const qr = opts.link ? (CAPTION.qrSize + CAPTION.pad) * k : 0;
+    const textX = crop.minX + (w - qr) / 2;
+    const base = { x: textX, "text-anchor": "middle", "font-family": "system-ui, sans-serif" };
+    let y = crop.maxY;
+    if (opts.caption) {
+      const hot = make("linearGradient", { id: "export-title", x1: 0, y1: 0, x2: 1, y2: 0 });
+      hot.append(
+        make("stop", { offset: 0, "stop-color": "#ff6b8b" }),
+        make("stop", { offset: 0.55, "stop-color": "#ff8a3d" }),
+        make("stop", { offset: 1, "stop-color": "#ffd166" }),
+      );
+      defs.append(hot);
+      const title = make("text", {
+        ...base,
+        y: (y += 0.55 * k),
+        "font-size": 0.42 * k,
+        "font-weight": 900,
+        "letter-spacing": 0.01 * k,
+        fill: "url(#export-title)",
+      });
+      title.textContent = opts.caption.title;
+      clone.append(title);
+      if (opts.caption.subtitle) {
+        const sub = make("text", { ...base, y: (y += 0.43 * k), "font-size": 0.28 * k, fill: "rgba(248,244,255,0.82)" });
+        sub.textContent = opts.caption.subtitle;
+        clone.append(sub);
+      }
+    }
+    if (opts.link) {
+      const url = make("text", { ...base, y: y + 0.4 * k, "font-size": 0.2 * k, fill: "rgba(248,244,255,0.6)" });
+      url.textContent = opts.link.replace(/^https?:\/\//, "");
+      clone.append(url);
+      const size = CAPTION.qrSize * k;
+      clone.append(
+        await qrTile(opts.link, crop.maxX - CAPTION.pad * k - size, crop.maxY + (captionH - size) / 2, size),
+      );
     }
   }
 
@@ -206,3 +253,29 @@ function paintBackdrop(defs: Element, box: { minX: number; minY: number; w: numb
   return g;
 }
 
+
+/**
+ * A QR code on a small white tile (dark on light: many phone scanners can't read inverted
+ * codes). The encoder is loaded only when exporting, so it costs nothing until then.
+ */
+async function qrTile(text: string, x: number, y: number, size: number) {
+  const { default: qrcode } = await import("qrcode-generator");
+  const qr = qrcode(0, "M");
+  qr.addData(text);
+  qr.make();
+  const n = qr.getModuleCount();
+  const quiet = 2; // modules of white margin around the code
+  const cell = size / (n + quiet * 2);
+  let d = "";
+  for (let r = 0; r < n; r++) {
+    for (let c = 0; c < n; c++) {
+      if (qr.isDark(r, c)) d += `M${(c + quiet) * cell},${(r + quiet) * cell}h${cell}v${cell}h${-cell}z`;
+    }
+  }
+  const g = make("g", { transform: `translate(${x},${y})` });
+  g.append(
+    make("rect", { width: size, height: size, rx: cell * 1.5, fill: "#ffffff" }),
+    make("path", { d, fill: "#1a1240", "shape-rendering": "crispEdges" }),
+  );
+  return g;
+}

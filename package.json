@@ -13,6 +13,7 @@
     "puzzles": "tsx scripts/build-puzzles.ts"
   },
   "dependencies": {
+    "qrcode-generator": "^2.0.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"
   },
