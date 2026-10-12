@@ -2,3 +2,7 @@ node_modules
 dist
 .wrangler
 scripts/out
+
+# personal notes (not part of the project)
+NOTES.md
+NextStep.md

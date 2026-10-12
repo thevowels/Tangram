@@ -6,6 +6,7 @@ import { formatTime, PuzzlePicker } from "./components/PuzzlePicker";
 import { Toolbar } from "./components/Toolbar";
 import { JointTip } from "./components/Tip";
 import { exportBoardImage } from "./exportImage";
+import { puzzleIdFromUrl, puzzleLink, SITE_URL } from "./site";
 import { flip, rotate } from "./game/actions";
 import { centreOn, evaluate, perfectFit, settleFlush, type Puzzle } from "./game/check";
 import {
@@ -186,7 +187,12 @@ function FreePlay() {
   };
 
   const exportPng = () => {
-    if (svgRef.current && layout) void exportBoardImage(svgRef.current, layout.board, { filename: "tangram.jpg" });
+    if (!svgRef.current || !layout) return;
+    void exportBoardImage(svgRef.current, layout.board, {
+      filename: "tangram.jpg",
+      caption: { title: "My Tangram", subtitle: "Made in free play" },
+      link: SITE_URL,
+    });
   };
 
   return (
@@ -306,6 +312,7 @@ function PuzzlePlay({
         title: puzzle.name,
         subtitle: solvedIn !== null ? `Solved in ${formatTime(solvedIn)}` : `In progress · ${pct}% matched`,
       },
+      link: puzzleLink(puzzle.id),
     });
   };
 
@@ -367,7 +374,16 @@ function PuzzlePlay({
 
 export default function App() {
   const [mode, setMode] = useState<Mode>("puzzles");
-  const [puzzle, setPuzzle] = useState<Puzzle | null>(null);
+  // `?p=<id>` opens that puzzle directly (shared links and export QR codes use this)
+  const [puzzle, setPuzzle] = useState<Puzzle | null>(
+    () => PUZZLES.find((p) => p.id === puzzleIdFromUrl()) ?? null,
+  );
+
+  // keep the address in sync, so the current puzzle can be shared by copying the URL
+  useEffect(() => {
+    const want = mode === "puzzles" && puzzle ? `?p=${puzzle.id}` : "";
+    if (location.search !== want) history.replaceState(null, "", location.pathname + want);
+  }, [mode, puzzle]);
   const [solved, setSolved] = useState<Record<string, number>>(loadSolved);
   const touch = useMedia("(pointer: coarse)");
 
