@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { PIECES, piecePolygon, pieceTransform, squareLayout, type PieceState } from "./geometry/pieces";
-import { area, cornerJoints, mtv, sharedEdges, type Poly } from "./geometry/polygon";
+import { area, bounds, cornerJoints, mtv, sharedEdges, type Poly } from "./geometry/polygon";
 import { findSnap } from "./geometry/snap";
 import { groupOf, hasOverlap, isLocked, moveWithPush, transformWithPush } from "./physics/resolve";
-import { coverage, type Puzzle } from "./game/check";
+import { coverage, evaluate, type Puzzle } from "./game/check";
 import { flip, rotate, step45 } from "./game/actions";
-import { LANDSCAPE, PORTRAIT, remap, trayLayout } from "./game/layout";
+import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
 
 const puzzles = puzzlesJson as unknown as Puzzle[];
@@ -267,5 +267,60 @@ describe("layouts", () => {
     const out = remap([onTarget], LANDSCAPE, PORTRAIT, true)[0];
     expect(out.x).toBeCloseTo(PORTRAIT.target[0] + 0.5, 6);
     expect(out.y).toBeCloseTo(PORTRAIT.target[1], 6);
+  });
+});
+
+describe("board fits each puzzle (playable on every screen)", () => {
+  const screens: [string, number, number][] = [
+    ["small phone", 320, 470],
+    ["phone", 375, 600],
+    ["phone landscape", 740, 290],
+    ["tablet", 768, 900],
+    ["desktop", 1240, 600],
+    ["wide desktop", 1880, 860],
+  ];
+  const inside = (polys: Poly[], b: { width: number; height: number }) => {
+    const e = 1e-6;
+    return polys.flat().every(([x, y]) => x >= -e && y >= -e && x <= b.width + e && y <= b.height + e);
+  };
+
+  for (const p of puzzles) {
+    it(`${p.name}`, () => {
+      for (const [screen, w, h] of screens) {
+        const l = fitLayout(w, h, figureExtent(p.polygons as Poly[]));
+        const guide = placeSilhouette(p.polygons as Poly[], l.target);
+        const tray = trayLayout(l);
+        const trayPolys = tray.map(piecePolygon);
+        const where = `${p.name} on ${screen}`;
+
+        expect(inside(guide, l.board), `${where}: silhouette fits`).toBe(true);
+        expect(inside(trayPolys, l.board), `${where}: tray fits`).toBe(true);
+        expect(hasOverlap(tray), `${where}: tray pieces apart`).toBe(false);
+        const g = bounds(guide);
+        const t = bounds(trayPolys);
+        const apart = t.minX >= g.maxX || t.maxX <= g.minX || t.minY >= g.maxY || t.maxY <= g.minY;
+        expect(apart, `${where}: tray clear of the silhouette`).toBe(true);
+
+        // play it: turn each piece in the tray, then put it in its solution spot
+        const b = { ...l.board, outline: guide };
+        let state: PieceState[] | null = tray;
+        for (const s of p.solution) {
+          const cur = state!.find((q) => q.id === s.id)!;
+          state = transformWithPush(state!, { ...cur, rot: s.rot, flipped: s.flipped }, b);
+          expect(state, `${where}: ${s.id} can turn in the tray`).not.toBeNull();
+          state = transformWithPush(state!, { ...s, x: s.x + l.target[0], y: s.y + l.target[1] }, b);
+          expect(state, `${where}: ${s.id} can be placed`).not.toBeNull();
+        }
+        expect(evaluate(state!, guide).solved, `${where}: solved`).toBe(true);
+      }
+    });
+  }
+
+  it("pieces get much bigger than the old fixed board", () => {
+    // old board: at least 18 × 9.5 units on landscape screens
+    const old = Math.min(1240 / 18, 600 / 9.5);
+    const square = puzzles.find((q) => q.name === "Square")!;
+    const l = fitLayout(1240, 600, figureExtent(square.polygons as Poly[]));
+    expect(1240 / l.board.width).toBeGreaterThan(old * 1.5);
   });
 });

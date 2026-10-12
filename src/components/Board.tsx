@@ -55,11 +55,17 @@ interface FreeTwist {
   applied: number; // 45° steps applied so far
 }
 
-/** A finger resting near the selection, waiting to see whether a second one joins it. */
+/**
+ * A finger resting near the selection (on empty space or a floating button), waiting to see
+ * what it becomes: a tap, a one-finger dial (if it moves), or a two-finger twist.
+ */
 interface Pending {
   pointerId: number;
   at: Vec;
   startTime: number;
+  /** What a plain tap does: press the button it started on, or clear the selection. */
+  onTap(): void;
+  fromButton: boolean;
 }
 
 /** One finger circling inside the zone: the selection turns to follow it, like a joystick. */
@@ -345,12 +351,26 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
    * Empty space: near the selection, a finger waits for a second one to twist with;
    * anywhere else (or a lone tap) clears the selection.
    */
+  /** A floating button: tap to press it, or start circling from it to use the dial. */
+  const onButtonDown = (e: PointerEvent, act: () => void) => {
+    e.stopPropagation();
+    if (secondFinger(e)) return;
+    capture(e);
+    pending.current = { pointerId: e.pointerId, at: toWorld(e), startTime: performance.now(), onTap: act, fromButton: true };
+  };
+
   const onBoardDown = (e: PointerEvent) => {
     if (secondFinger(e)) return;
     const w = toWorld(e);
     if (!solved && selected.length && inZone(selected, w)) {
       capture(e);
-      pending.current = { pointerId: e.pointerId, at: w, startTime: performance.now() };
+      pending.current = {
+        pointerId: e.pointerId,
+        at: w,
+        startTime: performance.now(),
+        onTap: () => onSelect([]),
+        fromButton: false,
+      };
     } else {
       onSelect([]);
     }
@@ -423,9 +443,9 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
     }
     const p = pending.current;
     if (p?.pointerId === e.pointerId) {
-      // a lone tap near (not on) the selection: treat it like tapping empty space
+      // a tap that never became a dial: press the button, or (on empty space) deselect
       pending.current = null;
-      if (performance.now() - p.startTime < TAP_TIME) onSelect([]);
+      if (p.fromButton || performance.now() - p.startTime < TAP_TIME) p.onTap();
       return;
     }
     if (twist.current?.pointerId === e.pointerId) {
@@ -539,6 +559,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
       })()}
       {selPieces.length > 0 && (
         <PieceActions
+          onButtonDown={onButtonDown}
           moving={moving}
           ids={selected}
           polys={selPieces.map(piecePolygon)}
@@ -555,6 +576,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
 
 /** Floating rotate / flip buttons beside the selection, sized in screen pixels. */
 function PieceActions({
+  onButtonDown,
   moving,
   ids,
   polys,
@@ -563,6 +585,7 @@ function PieceActions({
   onRotate,
   onFlip,
 }: {
+  onButtonDown(e: PointerEvent, act: () => void): void;
   moving: boolean;
   ids: string[];
   polys: Poly[];
@@ -596,11 +619,7 @@ function PieceActions({
             className="action"
             role="button"
             aria-label={btn.label}
-            onPointerDown={(e) => e.stopPropagation()}
-            onPointerUp={(e) => {
-              e.stopPropagation();
-              btn.act();
-            }}
+            onPointerDown={(e) => onButtonDown(e, btn.act)}
           >
             <title>{btn.label}</title>
             <circle r={r} />
