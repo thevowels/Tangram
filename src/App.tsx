@@ -26,6 +26,7 @@ import {
   bestTimes,
   bump,
   loadDesigns,
+  markDeleted,
   loadProgress,
   recordSolve,
   saveDesigns,
@@ -35,6 +36,7 @@ import {
 } from "./storage";
 import { computeBadges, newlyEarned, type Badge } from "./game/badges";
 import { BadgesSheet, BadgeToast } from "./components/Badges";
+import { codeFromUrl, scheduleSync, SYNC_EVENT, syncNow } from "./sync";
 import puzzlesJson from "./data/puzzles.json";
 
 const PUZZLES = puzzlesJson as unknown as Puzzle[];
@@ -178,6 +180,12 @@ function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void
   const g = usePieces(layout, freeLayout, noop, false);
   const [designs, setDesigns] = useState<Design[]>(loadDesigns);
   const [name, setName] = useState("");
+  // designs saved on another device arrive with a sync
+  useEffect(() => {
+    const reload = () => setDesigns(loadDesigns());
+    window.addEventListener(SYNC_EVENT, reload);
+    return () => window.removeEventListener(SYNC_EVENT, reload);
+  }, []);
 
   const save = () => {
     if (!g.pieces || !layout) return;
@@ -200,6 +208,8 @@ function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void
     const next = designs.filter((d) => d.name !== n);
     setDesigns(next);
     saveDesigns(next);
+    markDeleted(n);
+    scheduleSync();
   };
 
   const exportPng = () => {
@@ -235,7 +245,7 @@ function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void
             save();
           }}
         >
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name your design" />
+          <input value={name} maxLength={40} onChange={(e) => setName(e.target.value)} placeholder="Name your design" />
           <button type="submit" className="primary">
             Save
           </button>
@@ -424,7 +434,21 @@ export default function App() {
   const solved = useMemo(() => bestTimes(progress), [progress]);
   const badges = useMemo(() => computeBadges(progress, PUZZLES), [progress]);
   const [toasts, setToasts] = useState<Badge[]>([]);
-  const [showBadges, setShowBadges] = useState(false);
+  // a sync code handed over by QR (`#sync=…`) opens the sheet ready to use it
+  const [incomingCode] = useState(codeFromUrl);
+  const [showBadges, setShowBadges] = useState(incomingCode !== null);
+
+  // progress from other devices: on load, and whenever a sync brings something new
+  useEffect(() => {
+    const reload = () => {
+      const p = loadProgress();
+      progressRef.current = p;
+      setProgress(p);
+    };
+    window.addEventListener(SYNC_EVENT, reload);
+    void syncNow();
+    return () => window.removeEventListener(SYNC_EVENT, reload);
+  }, []);
 
   /** Apply a change to progress: save it, and celebrate any badge it unlocks. */
   const updateProgress = useCallback((change: (p: Progress) => Progress) => {
@@ -437,11 +461,20 @@ export default function App() {
     if (fresh.length) setToasts((t) => [...t, ...fresh]);
   }, []);
   const dismissToast = useCallback(() => setToasts((t) => t.slice(1)), []);
-  const track = useCallback((kind: "designsSaved" | "exports") => updateProgress((p) => bump(p, kind)), [updateProgress]);
+  const track = useCallback(
+    (kind: "designsSaved" | "exports") => {
+      updateProgress((p) => bump(p, kind));
+      // a saved design is worth keeping, so it creates the account like a solve does
+      scheduleSync(kind === "designsSaved");
+    },
+    [updateProgress],
+  );
 
   const onSolved = useCallback(
     (ms: number) => {
-      if (puzzle) updateProgress((p) => recordSolve(p, puzzle.id, ms));
+      if (!puzzle) return;
+      updateProgress((p) => recordSolve(p, puzzle.id, ms));
+      scheduleSync(true);
     },
     [puzzle, updateProgress],
   );
@@ -461,7 +494,7 @@ export default function App() {
           <Logo />
           <h1>Tangram</h1>
         </div>
-        <button className="badge-chip" onClick={() => setShowBadges(true)} aria-label="Badges">
+        <button className="badge-chip" onClick={() => setShowBadges(true)} aria-label="Badges and sync">
           <span aria-hidden>🏅</span> {badges.filter((b) => b.earned).length}
           <small>/{badges.length}</small>
         </button>
@@ -490,7 +523,9 @@ export default function App() {
             <PuzzlePicker puzzles={PUZZLES} solved={solved} onPick={setPuzzle} />
           ))}
       </main>
-      {showBadges && <BadgesSheet badges={badges} onClose={() => setShowBadges(false)} />}
+      {showBadges && (
+        <BadgesSheet badges={badges} incomingCode={incomingCode} onClose={() => setShowBadges(false)} />
+      )}
       <BadgeToast badge={toasts[0]} onDone={dismissToast} />
       <footer>
         {touch ? (

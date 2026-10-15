@@ -28,7 +28,7 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
   2. `npm run build` (typecheck + build)
   3. a puzzles check: `npm run puzzles`, then `git diff --exit-code src/data/puzzles.json`.
 - If you edit `scripts/figures.ts`, run `npm run puzzles` and commit the regenerated JSON, or CI fails.
-- **`deploy.yml`** runs on every push to `main` (and manually via workflow_dispatch). It tests, then runs `npm run deploy` with the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets.
+- **`deploy.yml`** runs on every push to `main` (and manually via workflow_dispatch). It tests, applies D1 migrations (`wrangler d1 migrations apply DB --remote`), then runs `npm run deploy` with the `CLOUDFLARE_API_TOKEN` / `CLOUDFLARE_ACCOUNT_ID` repo secrets. The token needs **Workers Scripts: Edit** and **D1: Edit**.
 - **Production follows `main`.** Don't run `npm run deploy` from feature branches; it overwrites the live Worker until the next merge.
 
 ## SEO / icons
@@ -164,7 +164,7 @@ Any arrangement whose shape matches the silhouette wins.
   - The rules are pure, so the planned D1 backend can reuse them.
 - **Picker:** category headers show `n/total` with a meter. The wordmark hides ≤430px so the badge chip fits.
 
-**State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage only (`src/storage.ts`): designs, progress v2 (see Progress & badges), tip flags.
+**State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage (`src/storage.ts`): designs, deleted-design markers, progress v2 (see Progress & badges), tip flags. Optional cloud sync on top of it is described under Accounts & sync.
 
 **Interaction model** (designed for touch first). The selection is a `string[]`: one piece, or a whole joined group.
 - Pressing a **piece** moves only that piece, pulling it out of its group.
@@ -205,4 +205,25 @@ Any arrangement whose shape matches the silhouette wins.
 - On short landscape screens (`max-height: 520px`), the toolbar becomes a vertical rail beside the board.
 - The board has `touch-action: none`. The design-name input uses `font-size: 16px` to stop iOS from zooming into it.
 
-**Worker** (`worker/index.ts`, `wrangler.jsonc`). Assets are served as an SPA (`not_found_handling: "single-page-application"`). Only `/api/*` reaches the Worker code (`run_worker_first`); currently it only has `/api/health`.
+**Worker** (`worker/index.ts`, `wrangler.jsonc`). Assets are served as an SPA (`not_found_handling: "single-page-application"`). Only `/api/*` reaches the Worker code (`run_worker_first`).
+
+**Accounts & sync** (anonymous, no OAuth, no email):
+- **Identity:** a random sync code `TAN-XXXXX-XXXXX` (10 chars from a 31-char alphabet without 0/O/1/I/L). The D1 `players` table stores only its SHA-256, so the code is the only key. `shared/progress.ts` has `generateCode`, `normalizeCode` (accepts lower case, spaces, missing dashes) and `formatCode`.
+- **`shared/`** is compiled into both the app and the Worker (both tsconfigs include it). It holds the `Progress` model, `mergeProgress` / `mergeDesigns` / `mergePayload` and `validatePayload`.
+  - Merge rules: min best time, earliest first day, max counters; designs keyed by name, latest `savedAt` wins. A deleted design is a marker with `data: null`, so it doesn't come back from another device.
+  - Merges are commutative and idempotent, so devices converge whatever order they sync in.
+  - `validatePayload` drops entries that don't fit `LIMITS` instead of failing the whole sync, and clamps solve times to a day.
+- **D1** (binding `DB`, schema in `migrations/`): `players`, `solves`, `designs`, `counters`. Add schema changes as new numbered migration files; never edit an applied one. Locally: `npx wrangler d1 migrations apply DB --local` (state in `.wrangler/`).
+- **API:**
+  - `POST /api/player` returns a new code (rate-limited by `CREATE_LIMIT`, 5/min per IP).
+  - `GET` / `PUT /api/progress` and `DELETE /api/player` take `Authorization: Bearer <code>`; unknown codes get 401.
+  - `PUT` merges server-side, writes only changed rows (with `min`/`max` upserts so concurrent syncs still converge) and returns the merged payload.
+  - Every API request counts against `API_LIMIT` (60/min per IP); bodies over `LIMITS.maxBodyBytes` are refused.
+- **Client (`src/sync.ts`), offline-first:** localStorage stays the source of truth and failures are silent.
+  - No account until it's worth one: the first solve or saved design (`scheduleSync(true)`, debounced). Plain visits create nothing.
+  - Syncs on load and after solves, saves, deletes and exports. All server calls go through `serial()`, so they never interleave.
+  - Results are merged again with local state before saving, then `SYNC_EVENT` tells `App` and `FreePlay` to reload.
+  - A 401 means the account was deleted elsewhere: the code is forgotten and local data kept.
+- **UI** (`SyncPanel` in `components/Badges.tsx`, at the bottom of the badges sheet): the code with Copy and a QR; "I have a code from another device"; "Delete my online data" (two-step; sets `off` so no new account is created until "Turn sync back on").
+  - The QR encodes `SITE_URL/#sync=<code>`. A fragment, so the code never reaches server logs. `codeFromUrl()` reads it once, strips it, and opens the sheet with the code ready to use.
+  - Using another code uploads this device's progress into that account, then deletes this device's old account.

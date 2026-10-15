@@ -1146,6 +1146,113 @@ kbd {
   text-transform: uppercase;
 }
 
+/* ---- sync (in the badges sheet) ---- */
+
+.sync {
+  display: grid;
+  gap: 10px;
+  justify-items: start;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--glass-line);
+}
+
+.sync h3 {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 900;
+}
+
+.sync p {
+  margin: 0;
+}
+
+.sync .muted {
+  color: var(--muted);
+}
+
+.sync .small {
+  font-size: 0.8rem;
+}
+
+.sync-code {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync-code code {
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgb(0 0 0 / 0.3);
+  border: 1px solid var(--glass-line);
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  user-select: all;
+}
+
+.sync-qr {
+  width: 168px;
+  height: 168px;
+  border-radius: 12px;
+}
+
+.sync-enter {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+}
+
+.sync-enter input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-line);
+  background: rgb(0 0 0 / 0.25);
+  color: inherit;
+  font: inherit;
+  font-size: 16px; /* stops iOS zooming into the field */
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.sync-message {
+  color: #ffd166;
+  font-weight: 600;
+}
+
+.sync button.link {
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  backdrop-filter: none;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.sync .danger-link {
+  color: #ff8fa3;
+}
+
+.sync-delete {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.sync button.danger {
+  background: #e5383b;
+  border-color: transparent;
+  color: #fff;
+}
+
 @keyframes toast-in {
   from {
     opacity: 0;
