@@ -25,9 +25,16 @@ export interface SyncDesign {
   data: unknown;
 }
 
+/** The player's chosen name, with when it was set (the latest change wins across devices). */
+export interface Nickname {
+  name: string;
+  at: number;
+}
+
 export interface SyncPayload {
   progress: Progress;
   designs: SyncDesign[];
+  nickname?: Nickname;
 }
 
 export const emptyProgress = (): Progress => ({
@@ -69,10 +76,18 @@ export function mergeDesigns(a: SyncDesign[], b: SyncDesign[]): SyncDesign[] {
   return [...byName.values()].sort((x, y) => y.savedAt - x.savedAt);
 }
 
-export const mergePayload = (a: SyncPayload, b: SyncPayload): SyncPayload => ({
-  progress: mergeProgress(a.progress, b.progress),
-  designs: mergeDesigns(a.designs, b.designs),
-});
+/** The latest change wins; ties (e.g. two untouched random names, both at 0) go to the smaller name. */
+export const mergeNickname = (a?: Nickname, b?: Nickname): Nickname | undefined =>
+  !a ? b : !b ? a : b.at > a.at || (b.at === a.at && b.name < a.name) ? b : a;
+
+export const mergePayload = (a: SyncPayload, b: SyncPayload): SyncPayload => {
+  const nickname = mergeNickname(a.nickname, b.nickname);
+  return {
+    progress: mergeProgress(a.progress, b.progress),
+    designs: mergeDesigns(a.designs, b.designs),
+    ...(nickname ? { nickname } : {}),
+  };
+};
 
 // ---- validation (never trust what comes over the wire) ----
 
@@ -118,7 +133,13 @@ export function validatePayload(x: unknown): SyncPayload | null {
     designs.push({ name, savedAt, data: data ?? null });
   }
   const counter = (n: unknown) => (isInt(n) ? Math.min(n, LIMITS.maxCounter) : 0);
+  let nickname: Nickname | undefined;
+  if (isObject(x.nickname) && typeof x.nickname.name === "string" && isInt(x.nickname.at)) {
+    const name = cleanNickname(x.nickname.name);
+    if (name) nickname = { name, at: x.nickname.at };
+  }
   return {
+    ...(nickname ? { nickname } : {}),
     progress: {
       v: 2,
       solved,
@@ -127,6 +148,34 @@ export function validatePayload(x: unknown): SyncPayload | null {
     },
     designs,
   };
+}
+
+// ---- nicknames ----
+
+export const NICKNAME_MAX = 20;
+
+/** Words a nickname may not contain (checked without spaces or punctuation, any case). */
+const BLOCKED = [
+  "admin", "moderator", "official", "tangramteam", "support", "anthropic", "claude",
+  "fuck", "shit", "cunt", "bitch", "nigger", "nigga", "faggot", "retard", "whore", "slut", "nazi", "hitler",
+];
+
+/**
+ * Tidy a nickname: trims and collapses spaces, removes invisible and control characters, and
+ * allows letters and marks in any script, digits, and a little punctuation.
+ * Returns null if nothing usable is left, it is too long, or it contains a blocked word.
+ */
+export function cleanNickname(input: string): string | null {
+  const name = input
+    .normalize("NFC")
+    .replace(/[\p{Cc}\p{Cf}]/gu, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!name || [...name].length > NICKNAME_MAX) return null;
+  if (!/^[\p{L}\p{M}\p{N} ._'-]+$/u.test(name) || !/[\p{L}\p{N}]/u.test(name)) return null;
+  const squashed = name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  if (BLOCKED.some((w) => squashed.includes(w))) return null;
+  return name;
 }
 
 // ---- sync codes: TAN-XXXXX-XXXXX ----

@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { bounds, toPath, type Poly } from "../geometry/polygon";
 import type { Puzzle } from "../game/check";
 
@@ -11,6 +12,34 @@ export const formatTime = (ms: number) => {
   const s = Math.round(ms / 1000);
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 };
+
+/** 1234 → "1.2k" */
+export const formatCount = (n: number) =>
+  n < 1000 ? String(n) : n < 10_000 ? `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k` : `${Math.round(n / 1000)}k`;
+
+interface PuzzleStats {
+  solvers: number;
+  avgMs: number;
+}
+
+/**
+ * How everyone does on each puzzle, from the server. The server only reports puzzles with
+ * enough solvers to say something; offline, or before that, cards simply show nothing.
+ */
+function useGlobalStats() {
+  const [stats, setStats] = useState<Record<string, PuzzleStats>>({});
+  useEffect(() => {
+    let live = true;
+    fetch("/api/stats")
+      .then((r) => (r.ok ? r.json() : {}))
+      .then((s: Record<string, PuzzleStats>) => live && setStats(s))
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []);
+  return stats;
+}
 
 // card accents cycle through the piece colours
 const ACCENTS = ["#ff4d6d", "#3a86ff", "#ffbe0b", "#00d4c8", "#8ac926", "#c77dff", "#fb5607"];
@@ -27,6 +56,7 @@ function Thumb({ loops }: { loops: Poly[] }) {
 
 export function PuzzlePicker({ puzzles, solved, onPick }: Props) {
   const done = puzzles.filter((p) => p.id in solved).length;
+  const stats = useGlobalStats();
   return (
     <div className="picker">
       <div className="picker-hero">
@@ -71,6 +101,11 @@ export function PuzzlePicker({ puzzles, solved, onPick }: Props) {
                   <Thumb loops={p.polygons} />
                   <span className="card-name">{p.name}</span>
                   {p.id in solved && <span className="card-badge">✓ {formatTime(solved[p.id])}</span>}
+                  {stats[p.id] && (
+                    <span className="card-stats">
+                      {formatCount(stats[p.id].solvers)} solved · avg {formatTime(stats[p.id].avgMs)}
+                    </span>
+                  )}
                 </button>
               ))}
           </div>

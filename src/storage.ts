@@ -1,7 +1,7 @@
 import type { PieceState } from "./geometry/pieces";
 import type { Layout } from "./game/layout";
 // the progress model lives in shared/ so the Worker can merge and validate it too
-import type { Progress } from "../shared/progress";
+import type { Nickname, Progress } from "../shared/progress";
 export type { Progress, SolveRecord } from "../shared/progress";
 
 export interface Design {
@@ -83,3 +83,10 @@ const DELETED = "tangram.designs.deleted";
 export const loadDeleted = () => read<Record<string, number>>(DELETED, {});
 export const saveDeleted = (d: Record<string, number>) => localStorage.setItem(DELETED, JSON.stringify(d));
 export const markDeleted = (name: string, at = Date.now()) => saveDeleted({ ...loadDeleted(), [name]: at });
+
+// ---- nickname ----
+
+const NICKNAME = "tangram.nickname";
+
+export const loadNickname = () => read<Nickname | null>(NICKNAME, null);
+export const saveNickname = (n: Nickname) => localStorage.setItem(NICKNAME, JSON.stringify(n));

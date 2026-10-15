@@ -27,15 +27,18 @@ import {
   bump,
   loadDesigns,
   markDeleted,
+  loadNickname,
   loadProgress,
   recordSolve,
   saveDesigns,
+  saveNickname,
   saveProgress,
   type Design,
   type Progress,
 } from "./storage";
 import { computeBadges, newlyEarned, type Badge } from "./game/badges";
 import { BadgesSheet, BadgeToast } from "./components/Badges";
+import { NicknamePrompt } from "./components/Nickname";
 import { codeFromUrl, scheduleSync, SYNC_EVENT, syncNow } from "./sync";
 import puzzlesJson from "./data/puzzles.json";
 
@@ -172,7 +175,13 @@ function usePieces(
   return { pieces, selected, doRotate, doFlip, reset, replace: setPieces, boardProps };
 }
 
-function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void }) {
+function FreePlay({
+  nickname,
+  onTrack,
+}: {
+  nickname: string | null;
+  onTrack(kind: "designsSaved" | "exports"): void;
+}) {
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const layout = useFitLayout(stageRef);
@@ -217,7 +226,10 @@ function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void
     onTrack("exports");
     void exportBoardImage(svgRef.current, layout.board, {
       filename: "tangram.jpg",
-      caption: { title: "My Tangram", subtitle: "Made in free play" },
+      caption: {
+        title: "My Tangram",
+        subtitle: nickname ? `Made by ${nickname} in free play` : "Made in free play",
+      },
       link: SITE_URL,
     });
   };
@@ -271,12 +283,14 @@ function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void
 
 function PuzzlePlay({
   puzzle,
+  nickname,
   onSolved,
   onTrack,
   onNext,
   onBack,
 }: {
   puzzle: Puzzle;
+  nickname: string | null;
   onSolved(ms: number): void;
   onTrack(kind: "exports"): void;
   onNext(): void;
@@ -354,7 +368,10 @@ function PuzzlePlay({
       crop: { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad },
       caption: {
         title: puzzle.name,
-        subtitle: solvedIn !== null ? `Solved in ${formatTime(solvedIn)}` : `In progress · ${pct}% matched`,
+        subtitle:
+          solvedIn !== null
+            ? `Solved${nickname ? ` by ${nickname}` : ""} in ${formatTime(solvedIn)}`
+            : `${nickname ? `${nickname} · in progress` : "In progress"} · ${pct}% matched`,
       },
       link: puzzleLink(puzzle.id),
     });
@@ -437,6 +454,17 @@ export default function App() {
   // a sync code handed over by QR (`#sync=…`) opens the sheet ready to use it
   const [incomingCode] = useState(codeFromUrl);
   const [showBadges, setShowBadges] = useState(incomingCode !== null);
+  const [nickname, setNickname] = useState(() => loadNickname()?.name ?? null);
+  // first visit: ask for a name (not when arriving with a sync code, which brings its own)
+  const [askName, setAskName] = useState(() => nickname === null && incomingCode === null);
+
+  /** A name the player typed beats names on other devices; an untouched suggestion never does. */
+  const changeNickname = useCallback((name: string, typed: boolean) => {
+    saveNickname({ name, at: typed ? Date.now() : 0 });
+    setNickname(name);
+    setAskName(false);
+    scheduleSync();
+  }, []);
 
   // progress from other devices: on load, and whenever a sync brings something new
   useEffect(() => {
@@ -444,6 +472,7 @@ export default function App() {
       const p = loadProgress();
       progressRef.current = p;
       setProgress(p);
+      setNickname(loadNickname()?.name ?? null);
     };
     window.addEventListener(SYNC_EVENT, reload);
     void syncNow();
@@ -508,12 +537,13 @@ export default function App() {
         </nav>
       </header>
       <main>
-        {mode === "free" && <FreePlay onTrack={track} />}
+        {mode === "free" && <FreePlay nickname={nickname} onTrack={track} />}
         {mode === "puzzles" &&
           (puzzle ? (
             <PuzzlePlay
               key={puzzle.id}
               puzzle={puzzle}
+              nickname={nickname}
               onSolved={onSolved}
               onTrack={track}
               onNext={next}
@@ -524,8 +554,15 @@ export default function App() {
           ))}
       </main>
       {showBadges && (
-        <BadgesSheet badges={badges} incomingCode={incomingCode} onClose={() => setShowBadges(false)} />
+        <BadgesSheet
+          badges={badges}
+          incomingCode={incomingCode}
+          nickname={nickname}
+          onNickname={changeNickname}
+          onClose={() => setShowBadges(false)}
+        />
       )}
+      {askName && <NicknamePrompt onSave={changeNickname} />}
       <BadgeToast badge={toasts[0]} onDone={dismissToast} />
       <footer>
         {touch ? (

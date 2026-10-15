@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { NAME_PARTS, randomNickname } from "./game/names";
+import { formatCount } from "./components/PuzzlePicker";
 import {
+  cleanNickname,
+  mergeNickname,
   CODE_ALPHABET,
   CODE_LENGTH,
   emptyProgress,
@@ -156,5 +160,58 @@ describe("sync codes", () => {
     // a code that itself starts with TAN, typed without the prefix
     expect(normalizeCode("tanxy23456")).toBe("TANXY23456");
     expect(normalizeCode("TAN-TANXY-23456")).toBe("TANXY23456");
+  });
+});
+
+describe("nicknames", () => {
+  it("tidies names and keeps any script", () => {
+    expect(cleanNickname("  Aung   Phyo ")).toBe("Aung Phyo");
+    expect(cleanNickname("အောင်")).toBe("အောင်");
+    expect(cleanNickname("Zoë_the-Fox")).toBe("Zoë_the-Fox");
+    expect(cleanNickname("a\u200bb\u0007c")).toBe("abc");
+  });
+
+  it("refuses empty, too long, odd symbols and blocked words", () => {
+    for (const bad of ["", "   ", "...", "x".repeat(21), "<script>", "Admin", "S h i t head", "the.Moderator"]) {
+      expect(cleanNickname(bad), bad).toBeNull();
+    }
+    expect(cleanNickname("Grape Fox")).toBe("Grape Fox");
+  });
+
+  it("every random name is a valid nickname", () => {
+    for (const a of NAME_PARTS.adjectives) for (const n of NAME_PARTS.animals) expect(cleanNickname(`${a} ${n}`)).toBe(`${a} ${n}`);
+    expect(randomNickname(() => 0)).toBe(`${NAME_PARTS.adjectives[0]} ${NAME_PARTS.animals[0]}`);
+    let i = 0;
+    const seq = [0, 0, 0.5, 0.5];
+    expect(randomNickname(() => seq[i++], randomNickname(() => 0))).not.toBe(randomNickname(() => 0));
+  });
+
+  it("merges: the latest change wins, ties settle the same way on both sides", () => {
+    const old = { name: "Old", at: 1 };
+    const fresh = { name: "New", at: 2 };
+    expect(mergeNickname(old, fresh)).toEqual(fresh);
+    expect(mergeNickname(fresh, old)).toEqual(fresh);
+    expect(mergeNickname(undefined, old)).toEqual(old);
+    const a = { name: "Swift Fox", at: 0 };
+    const b = { name: "Brave Owl", at: 0 };
+    expect(mergeNickname(a, b)).toEqual(mergeNickname(b, a));
+    expect(mergeNickname(a, { name: "Aung", at: 5 })).toEqual({ name: "Aung", at: 5 });
+  });
+
+  it("travels in the payload and is validated there", () => {
+    const base = { progress: emptyProgress(), designs: [] };
+    expect(validatePayload({ ...base, nickname: { name: " Aung ", at: 3 } })).toEqual({
+      ...base,
+      nickname: { name: "Aung", at: 3 },
+    });
+    expect(validatePayload({ ...base, nickname: { name: "admin", at: 3 } })).toEqual(base);
+    expect(validatePayload({ ...base, nickname: "Aung" })).toEqual(base);
+    expect(mergePayload({ ...base, nickname: { name: "A", at: 1 } }, base).nickname).toEqual({ name: "A", at: 1 });
+  });
+});
+
+describe("stats formatting", () => {
+  it("shortens big counts", () => {
+    expect([5, 999, 1000, 1234, 9950, 12_345].map(formatCount)).toEqual(["5", "999", "1k", "1.2k", "9.9k", "12k"]);
   });
 });

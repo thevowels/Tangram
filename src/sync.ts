@@ -1,6 +1,6 @@
 // Optional cloud sync. localStorage stays the source of truth: the server only ever merges, and
 // any failure is silent and simply retried next time. There is no sign-in: a random sync code
-// (shown once in the Badges sheet) identifies the player; the server stores only its hash.
+// (shown in the Badges sheet) identifies the player; the server stores only its hash.
 
 import {
   formatCode,
@@ -10,7 +10,17 @@ import {
   type SyncDesign,
   type SyncPayload,
 } from "../shared/progress";
-import { loadDeleted, loadDesigns, loadProgress, saveDeleted, saveDesigns, saveProgress, type Design } from "./storage";
+import {
+  loadDeleted,
+  loadDesigns,
+  loadNickname,
+  loadProgress,
+  saveDeleted,
+  saveDesigns,
+  saveNickname,
+  saveProgress,
+  type Design,
+} from "./storage";
 
 const KEY = "tangram.sync";
 
@@ -49,7 +59,8 @@ export function localPayload(): SyncPayload {
     data: d,
   }));
   for (const [name, at] of Object.entries(loadDeleted())) designs.push({ name, savedAt: at, data: null });
-  return { progress: loadProgress(), designs };
+  const nickname = loadNickname();
+  return { progress: loadProgress(), designs, ...(nickname ? { nickname } : {}) };
 }
 
 /** Store a payload from the server, merged with whatever changed here while it was in flight. */
@@ -66,6 +77,7 @@ function applyLocal(remote: SyncPayload) {
       })),
   );
   saveDeleted(Object.fromEntries(merged.designs.filter((d) => d.data === null).map((d) => [d.name, d.savedAt])));
+  if (merged.nickname) saveNickname(merged.nickname);
 }
 
 // ---- requests ----

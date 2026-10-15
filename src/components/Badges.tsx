@@ -2,15 +2,20 @@ import { useEffect, useRef, useState } from "react";
 import type { Badge } from "../game/badges";
 import { normalizeCode } from "../../shared/progress";
 import { SITE_URL } from "../site";
+import { NicknameRow } from "./Nickname";
 import { deleteOnline, displayCode, enableSync, loadSync, switchToCode, SYNC_EVENT, type SyncState } from "../sync";
 
 /** A sheet listing every badge: earned ones in colour, locked ones dimmed with how to earn them. */
 export function BadgesSheet({
   badges,
   incomingCode,
+  nickname,
+  onNickname,
   onClose,
 }: {
   badges: Badge[];
+  nickname: string | null;
+  onNickname(name: string, typed: boolean): void;
   /** a code from a scanned QR link, offered for use */
   incomingCode: string | null;
   onClose(): void;
@@ -34,6 +39,7 @@ export function BadgesSheet({
             ✕
           </button>
         </div>
+        <NicknameRow name={nickname} onSave={onNickname} />
         <ul className="badge-list">
           {badges.map((b) => (
             <li key={b.id} className={"badge" + (b.earned ? " earned" : "")}>
