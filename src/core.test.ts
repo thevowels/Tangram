@@ -7,6 +7,8 @@ import { centreOn, coverage, evaluate, fitToOutline, perfectFit, settleFlush, sl
 import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
+import { computeBadges, newlyEarned } from "./game/badges";
+import { bump, migrateProgress, recordSolve, type Progress } from "./storage";
 
 const puzzles = puzzlesJson as unknown as Puzzle[];
 const board = { width: 20, height: 12 };
@@ -529,5 +531,71 @@ describe("finishing locks any valid arrangement edge to edge", () => {
     const swan = puzzles.find((q) => q.name === "Swan")!;
     const wrong = squareLayout([0, 0]);
     expect(fitToOutline(wrong, swan.polygons as Poly[])).toEqual(wrong);
+  });
+});
+
+describe("progress and badges", () => {
+  const empty: Progress = { v: 2, solved: {}, designsSaved: 0, exports: 0 };
+  const earned = (p: Progress) =>
+    computeBadges(p, puzzles)
+      .filter((b) => b.earned)
+      .map((b) => b.id);
+
+  it("migrates the old {id: bestMs} save without losing anything", () => {
+    const m = migrateProgress({ p01: 42_000, p12: 95_000 }, 2, "2026-10-01");
+    expect(m).toEqual({
+      v: 2,
+      solved: { p01: { best: 42_000, first: "2026-10-01" }, p12: { best: 95_000, first: "2026-10-01" } },
+      designsSaved: 2,
+      exports: 0,
+    });
+  });
+
+  it("keeps the best time and the first day", () => {
+    let p = recordSolve(empty, "p01", 50_000, "2026-10-01");
+    p = recordSolve(p, "p01", 40_000, "2026-10-05");
+    p = recordSolve(p, "p01", 70_000, "2026-10-06");
+    expect(p.solved.p01).toEqual({ best: 40_000, first: "2026-10-01" });
+  });
+
+  it("nothing is earned at the start", () => {
+    expect(earned(empty)).toEqual([]);
+  });
+
+  it("first solve, speed and day badges", () => {
+    let p = recordSolve(empty, "p01", 25_000, "2026-10-01");
+    expect(earned(p)).toEqual(expect.arrayContaining(["first", "quick"]));
+    for (let i = 2; i <= 10; i++) p = recordSolve(p, `p${String(i).padStart(2, "0")}`, 55_000, `2026-10-${String(i).padStart(2, "0")}`);
+    expect(earned(p)).toEqual(expect.arrayContaining(["speed", "regular", "devoted"]));
+  });
+
+  it("category badges need every puzzle in that category", () => {
+    const shapes = puzzles.filter((q) => q.category === "Shapes");
+    let p = empty;
+    for (const q of shapes.slice(1)) p = recordSolve(p, q.id, 90_000);
+    expect(earned(p)).not.toContain("shapes");
+    const b = computeBadges(p, puzzles).find((x) => x.id === "shapes")!;
+    expect([b.have, b.need]).toEqual([shapes.length - 1, shapes.length]);
+    p = recordSolve(p, shapes[0].id, 90_000);
+    expect(earned(p)).toContain("shapes");
+  });
+
+  it("Grand Master tracks the current puzzle count (new puzzles raise the bar)", () => {
+    let p = empty;
+    for (const q of puzzles) p = recordSolve(p, q.id, 90_000);
+    expect(earned(p)).toContain("all");
+    const more = [...puzzles, { id: "p99", category: "Animals" } as Puzzle];
+    expect(computeBadges(p, more).find((b) => b.id === "all")!.earned).toBe(false);
+  });
+
+  it("designer and show-off come from saving and exporting", () => {
+    expect(earned(bump(empty, "designsSaved"))).toContain("designer");
+    expect(earned(bump(empty, "exports"))).toContain("showoff");
+  });
+
+  it("reports only newly earned badges", () => {
+    const before = recordSolve(empty, "p01", 90_000);
+    const after = recordSolve(before, "p02", 20_000);
+    expect(newlyEarned(before, after, puzzles).map((b) => b.id)).toEqual(["quick"]);
   });
 });

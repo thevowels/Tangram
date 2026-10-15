@@ -153,7 +153,18 @@ Any arrangement whose shape matches the silhouette wins.
 - **Deep links:** `?p=<id>` opens a puzzle directly (`puzzleIdFromUrl`). `App` keeps the address in sync with `history.replaceState`, so the current puzzle can be shared by copying the URL.
 - If you add a new overlay to `Board`, add its class to `UI_ONLY`.
 
-**State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage only (`src/storage.ts`).
+**Progress & badges** (`src/storage.ts`, `src/game/badges.ts`, `src/components/Badges.tsx`):
+- **Progress v2** (`tangram.progress`): `{ v: 2, solved: { [id]: { best: ms, first: "YYYY-MM-DD" } }, designsSaved, exports }`.
+  - `loadProgress()` migrates the old `tangram.solved` (`{id: bestMs}`) once, with today as `first`.
+  - Change it only via `recordSolve` / `bump`.
+  - `App` holds it in `updateProgress` (with a ref, so a badge toast fires once even under StrictMode).
+- **Badges:** `computeBadges(progress, puzzles)` evaluates 12 pure rules: first solve, each category, all puzzles (the count is dynamic, so new puzzles raise the bar), speed, distinct days, design saved, picture exported.
+  - `newlyEarned(before, after)` drives the unlock toast (`BadgeToast`). The header chip opens `BadgesSheet`.
+  - Hints never name a specific puzzle.
+  - The rules are pure, so the planned D1 backend can reuse them.
+- **Picker:** category headers show `n/total` with a meter. The wordmark hides ≤430px so the badge chip fits.
+
+**State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage only (`src/storage.ts`): designs, progress v2 (see Progress & badges), tip flags.
 
 **Interaction model** (designed for touch first). The selection is a `string[]`: one piece, or a whole joined group.
 - Pressing a **piece** moves only that piece, pulling it out of its group.
