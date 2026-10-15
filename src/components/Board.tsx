@@ -513,6 +513,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
         ))}
       </defs>
       {guide && <path className={solved ? "guide solved" : "guide"} d={toPath(guide)} fillRule="evenodd" />}
+      <g className={"pieces" + (solved ? " solved-figure" : "")}>
       {ordered.map((p) => {
         const def = PIECE_BY_ID[p.id];
         const { sx } = pieceTransform(p);
@@ -538,6 +539,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
           />
         );
       })}
+      </g>
       {groupSelected && !dragging.length && (
         <path className="group-outline" d={toPath(selPieces.map(piecePolygon))} />
       )}

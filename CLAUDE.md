@@ -84,7 +84,7 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
   - `isLocked()`: a piece is locked when it sits inside the silhouette with an edge flush against its border.
   - `lockedIds()`: locked pieces plus everything joined to them.
   - Locked groups are walls in `resolve()`: never pushed or clamped. A move that would push one returns `null`, so the mover stops or slides.
-  - Dragging a locked piece yourself still works, because moving pieces are excluded. Locked pieces get the golden `.piece.locked` glow.
+  - Dragging a locked piece yourself still works, because moving pieces are excluded. Locked pieces get `.piece.locked`: slightly brighter, with a thin golden edge.
 - **Performance:**
   - `resolve()` returns immediately when nothing overlaps; groups and locks are only computed once something collides.
   - `moveWithPush()` stops sub-stepping once a step makes no progress.
@@ -113,7 +113,12 @@ Any arrangement whose shape matches the silhouette wins.
 - **Matching:** each piece goes to the nearest slot in the puzzle's stored `solution` with the same kind *and the same outline*, within `MAX_FIT_DISTANCE`.
   - Compare geometry, not `rot`. The two large (and two small) triangles have different base orientations, so equal outlines can have different `rot` values. A piece keeps its own rot/flip and only moves.
 - **Where the figure ends up:** pieces are matched against slots around their own centre (wherever the figure was built), then the result is placed **on the drawn silhouette** (`outlineAt` = `layout.target`). A figure finished anywhere glides onto the outline, so exports are always framed on it. `.piece.solved` has a longer transform transition for this move.
-- **Fallback:** if the arrangement doesn't match the stored solution (an alternative solution), `settleFlush` snaps pieces flush to close the gaps, and `centreOn` moves the whole figure onto the outline.
+- **Alternative solutions:** if the arrangement doesn't match the stored solution, `centreOn` moves the whole figure onto the outline, then **`fitToOutline`** locks it edge to edge.
+  - Every piece corner is pulled to the nearest outline corner or neighbouring corner (failing that, the nearest outline or piece edge), within `FIT_REACH`.
+  - All pieces relax together by translation only, anchored by the fixed outline, until corners meet.
+  - The result is accepted only if it matches the outline (>99.5%) with no overlaps; otherwise `settleFlush` is the last resort.
+  - The meter shows 100% only when the figure really locked.
+  - Tests: every puzzle knocked loose and refitted without its solution, plus a genuinely different Square solution.
 - **Animation:** the CSS transform transition makes the pieces glide in.
 
 **Puzzle authoring** (`scripts/figures.ts` → `scripts/build-puzzles.ts` → `src/data/puzzles.json`):
@@ -174,8 +179,13 @@ Any arrangement whose shape matches the silhouette wins.
 - The theme is dark violet. `body` carries the gradient and dot-grid backdrop (`background-attachment: fixed`), and nothing frames the play area.
 - Piece colours live in `PIECES` (`geometry/pieces.ts`) and are reused by the logo, the confetti and the picker card accents. `Board` turns each colour into a glossy `linearGradient` (`#tan-<id>`, via `mix()`).
 - Buttons are translucent "glass" (`--glass*` variables); primary actions use the `--hot` gradient.
-- The silhouette is a translucent fill with a dashed outline. Once solved, the pieces pulse with a glow (`.piece.solved`) and `Confetti` plays.
+- The silhouette is a translucent fill with a dashed outline. Once solved, the figure pulses with a glow (`.pieces.solved-figure`) and `Confetti` plays.
 - SVG `filter: drop-shadow(...)` lengths on pieces are in board units, not screen px, so they are tiny values like `0.1px`.
+- **No spilling effects on resting pieces.** A drop shadow or outer glow on one piece paints over its neighbour along a shared edge, so two pieces meeting edge to edge look like one overlaps the other. So:
+  - resting pieces have no shadow (only `.lifted`, while dragging);
+  - joints are a fine line with no glow;
+  - `.piece.locked` uses brightness plus a thin stroke;
+  - the solved glow is on the whole figure (`.pieces.solved-figure` wraps the piece paths), not on each piece.
 - `prefers-reduced-motion` disables the animations.
 
 **Mobile CSS** (`src/styles.css`):

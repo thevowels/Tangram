@@ -1,5 +1,5 @@
 import { PIECE_BY_ID, piecePolygon, type PieceState } from "../geometry/pieces";
-import { area, bounds, centroid, groupCentroid, mtv, pointInLoops, type Poly } from "../geometry/polygon";
+import { area, bounds, centroid, closestOnSegment, groupCentroid, mtv, pointInLoops, type Poly } from "../geometry/polygon";
 import { findSnap } from "../geometry/snap";
 
 // outlines are exact unions of the pieces, so a real solution scores ≈1
@@ -225,3 +225,79 @@ export function slotSnap(
   }
   return null;
 }
+
+/** How far a corner may be from its match and still be pulled to it when fitting. */
+const FIT_REACH = 0.35;
+
+/**
+ * Lock a finished figure together exactly, for any valid arrangement (not just the stored
+ * solution): every piece corner is pulled onto the nearest outline corner or neighbouring
+ * piece corner (or, failing that, onto the nearest outline / piece edge), and all pieces shift
+ * together in small relaxation steps, anchored by the fixed outline, until edges meet edge to
+ * edge. Only translations change (rotations are already exact). The result is accepted only if
+ * it matches the outline and nothing overlaps; otherwise the pieces come back unchanged.
+ */
+export function fitToOutline(pieces: PieceState[], outline: Poly[], iterations = 400): PieceState[] {
+  const outlineVerts = outline.flat();
+  const outlineEdges = outline.flatMap((l) => l.map((a, i) => [a, l[(i + 1) % l.length]] as const));
+  let state = pieces.map((p) => ({ ...p }));
+
+  for (let it = 0; it < iterations; it++) {
+    const polys = state.map(piecePolygon);
+    let worst = 0;
+    const shifts = state.map((_, i) => {
+      let sx = 0;
+      let sy = 0;
+      let weight = 0;
+      for (const [vx, vy] of polys[i]) {
+        // nearest corner: outline corners count double (they're fixed anchors)
+        let best: [number, number] | null = null;
+        let bestD = FIT_REACH;
+        let w = 1;
+        for (const [ox, oy] of outlineVerts) {
+          const d = Math.hypot(ox - vx, oy - vy);
+          if (d < bestD) [best, bestD, w] = [[ox, oy], d, 2];
+        }
+        polys.forEach((poly, j) => {
+          if (j === i) return;
+          for (const [px, py] of poly) {
+            const d = Math.hypot(px - vx, py - vy);
+            if (d < bestD) [best, bestD, w] = [[px, py], d, 1];
+          }
+        });
+        // otherwise the nearest point on an outline edge (or a neighbour's edge)
+        if (!best) {
+          const edges = [
+            ...outlineEdges.map((e) => [e, 2] as const),
+            ...polys.flatMap((poly, j) =>
+              j === i ? [] : poly.map((a, k) => [[a, poly[(k + 1) % poly.length]] as const, 1] as const),
+            ),
+          ];
+          for (const [[a, b], ew] of edges) {
+            const [cx, cy] = closestOnSegment([vx, vy], a, b);
+            const d = Math.hypot(cx - vx, cy - vy);
+            if (d < bestD) [best, bestD, w] = [[cx, cy], d, ew];
+          }
+        }
+        if (best) {
+          sx += (best[0] - vx) * w;
+          sy += (best[1] - vy) * w;
+          weight += w;
+          worst = Math.max(worst, bestD);
+        }
+      }
+      return weight ? ([sx / weight, sy / weight] as const) : ([0, 0] as const);
+    });
+    // move everyone part of the way (pieces pull on each other, so full steps would oscillate)
+    state = state.map((p, i) => ({ ...p, x: p.x + shifts[i][0] * 0.5, y: p.y + shifts[i][1] * 0.5 }));
+    if (worst < 1e-9) break;
+  }
+
+  const ok = coverage(state, outline, false) > 0.995 && !overlapping(state);
+  return ok ? state : pieces;
+}
+
+const overlapping = (pieces: PieceState[]) => {
+  const polys = pieces.map(piecePolygon);
+  return polys.some((a, i) => polys.some((b, j) => j > i && mtv(a, b)));
+};
