@@ -369,9 +369,13 @@ function PuzzlePlay({
   // set once usePieces exists below; lets the solve check pull pieces into place
   const replacePieces = useRef<(p: PieceState[]) => void>(() => {});
 
+  // counts the player's own moves (drops, turns, flips): the lesson's steps are checked only then
+  const [moves, setMoves] = useState(0);
+
   const check = useCallback(
     (pieces: PieceState[]) => {
       if (!guide) return;
+      setMoves((n) => n + 1);
       const { match, solved } = evaluate(pieces, guide);
       setMatch(match);
       session.current.best = Math.max(session.current.best, match);
@@ -416,23 +420,32 @@ function PuzzlePlay({
   );
   const g = usePieces(layout, initial, check, true, guide ?? undefined, slots);
 
-  // the lesson: steps pass as the player does them (in any order), compared with the start
-  const lessonStart = useRef<PieceState[] | null>(null);
+  // the lesson: steps pass as the player does them (in any order), compared with the start.
+  // The board resizes as the coach card's text changes (and on rotation), which shifts every
+  // piece; the start is shifted the same way, and steps are only checked after the player's own
+  // moves, so a resize never counts as a drag.
+  const lessonStart = useRef<{ pieces: PieceState[]; layout: Layout } | null>(null);
   useEffect(() => {
-    if (!lesson || !g.pieces || lessonStart.current || !guide) return;
-    lessonStart.current = g.pieces;
-    setMatch(evaluate(g.pieces, guide).match); // five pieces start in place: show it
-  }, [lesson, g.pieces, guide]);
+    if (!lesson || !g.pieces || !layout || !guide) return;
+    const start = lessonStart.current;
+    if (!start) {
+      lessonStart.current = { pieces: g.pieces, layout };
+      setMatch(evaluate(g.pieces, guide).match); // five pieces start in place: show it
+    } else if (start.layout !== layout) {
+      lessonStart.current = { pieces: remap(start.pieces, start.layout, layout, true), layout };
+    }
+  }, [lesson, g.pieces, layout, guide]);
   const [passed, setPassed] = useState<Set<Step>>(new Set());
   useEffect(() => {
-    if (!lesson || !g.pieces || !lessonStart.current) return;
-    const from = lessonStart.current;
+    if (!lesson || !moves || !g.pieces || !lessonStart.current) return;
+    const from = lessonStart.current.pieces;
     const now = g.pieces;
     setPassed((p) => {
       const add = STEPS.filter((s) => !p.has(s) && stepDone(s, from, now, solvedIn !== null));
       return add.length ? new Set([...p, ...add]) : p;
     });
-  }, [lesson, g.pieces, solvedIn]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lesson, moves, solvedIn]);
   const step = currentStep(passed);
   replacePieces.current = g.replace;
   const pct = Math.round(match * 100);
