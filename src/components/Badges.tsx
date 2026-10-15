@@ -202,7 +202,7 @@ function SyncPanel({ incomingCode }: { incomingCode: string | null }) {
       )}
 
       <p className="muted small">
-        No email, no tracking. Your code is your key: keep it private. Progress on this device is merged with it.
+        No email, no cookies, nothing that identifies you. Your code is your key: keep it private. Progress on this device is merged with it.
       </p>
       {code &&
         (confirmDelete ? (

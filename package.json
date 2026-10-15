@@ -10,7 +10,8 @@
     "deploy": "npm run build && wrangler deploy",
     "test": "vitest run",
     "cf-typegen": "wrangler types",
-    "puzzles": "tsx scripts/build-puzzles.ts"
+    "puzzles": "tsx scripts/build-puzzles.ts",
+    "analytics": "tsx scripts/analytics.ts"
   },
   "dependencies": {
     "qrcode-generator": "^2.0.4",

@@ -4,6 +4,7 @@ import { formatCount } from "./components/PuzzlePicker";
 import {
   cleanNickname,
   mergeNickname,
+  validateEvent,
   CODE_ALPHABET,
   CODE_LENGTH,
   emptyProgress,
@@ -213,5 +214,21 @@ describe("nicknames", () => {
 describe("stats formatting", () => {
   it("shortens big counts", () => {
     expect([5, 999, 1000, 1234, 9950, 12_345].map(formatCount)).toEqual(["5", "999", "1k", "1.2k", "9.9k", "12k"]);
+  });
+});
+
+describe("analytics events", () => {
+  it("accepts known events and tidies numbers", () => {
+    expect(validateEvent({ e: "start", p: "p07" })).toEqual({ e: "start", p: "p07" });
+    expect(validateEvent({ e: "solve", p: "p07", ms: 41_234.6 })).toEqual({ e: "solve", p: "p07", ms: 41_235 });
+    expect(validateEvent({ e: "quit", p: "p07", ms: 9e9, pct: 87.4 })).toEqual({ e: "quit", p: "p07", ms: 3_600_000, pct: 87 });
+    expect(validateEvent({ e: "free_open", p: "../x", ms: -1 })).toEqual({ e: "free_open" });
+    expect(validateEvent({ e: "export", p: "p01" })).toEqual({ e: "export", p: "p01" });
+  });
+
+  it("rejects unknown events and puzzle events without a puzzle", () => {
+    for (const bad of [null, "start", {}, { e: "hack" }, { e: "start" }, { e: "solve", p: "zzz" }]) {
+      expect(validateEvent(bad)).toBeNull();
+    }
   });
 });
