@@ -5,7 +5,7 @@ import { snap, turnBy } from "../game/actions";
 import { slotSnap } from "../game/check";
 import {
   lockedIds,
-  moveWithPush,
+  dragTo,
   STICK_MIN_LENGTH,
   STICK_TOL,
   stickyGroups,
@@ -418,7 +418,7 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
       d.moved = true;
       setDragging(d.ids);
     }
-    const next = moveWithPush(piecesRef.current, d.ids, [w[0] - d.grab[0], w[1] - d.grab[1]], board);
+    const next = dragTo(piecesRef.current, d.ids, [w[0] - d.grab[0], w[1] - d.grab[1]], board);
     piecesRef.current = next;
     onChange(next);
     applyTwist();

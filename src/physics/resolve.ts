@@ -239,6 +239,68 @@ export function moveWithPush(pieces: PieceState[], ids: string | string[], targe
   return state;
 }
 
+/** How far a dragged piece may be nudged so it fits where the finger points. */
+export const FIT_NUDGE = 0.3;
+
+/**
+ * Drag pieces toward `target` the way a hand means it. First the normal push physics
+ * (`moveWithPush`). If that gets blocked short of the target (by a piece locked to the outline,
+ * or a gap only just wide enough), try putting the pieces right at the target, nudged up to
+ * `FIT_NUDGE` clear of everything else (`fitAt`), and take whichever ends up closer.
+ *
+ * Without this a tight spot can only be entered along a perfect path: a finger that wobbles by
+ * a hair catches a corner of a neighbour and the piece stops at the entrance.
+ */
+export function dragTo(pieces: PieceState[], ids: string | string[], target: Vec, board: Board): PieceState[] {
+  const moved = moveWithPush(pieces, ids, target, board);
+  const id = asIds(ids)[0];
+  const at = moved.find((p) => p.id === id)!;
+  const miss = Math.hypot(at.x - target[0], at.y - target[1]);
+  if (miss < 0.02) return moved;
+  const fitted = fitAt(pieces, ids, target, board);
+  if (!fitted) return moved;
+  const f = fitted.find((p) => p.id === id)!;
+  return Math.hypot(f.x - target[0], f.y - target[1]) < miss - 1e-6 ? fitted : moved;
+}
+
+/**
+ * The given pieces moved (rigidly) so the first one is at `target`, then nudged out of every
+ * other piece, which all stay put. Returns null if that needs more than `FIT_NUDGE`, or if they
+ * can't be made to fit there at all.
+ */
+export function fitAt(pieces: PieceState[], ids: string | string[], target: Vec, board: Board): PieceState[] | null {
+  const set = new Set(asIds(ids));
+  const anchor = pieces.find((p) => p.id === asIds(ids)[0])!;
+  const want = sub(target, [anchor.x, anchor.y]);
+  const others = pieces.filter((p) => !set.has(p.id)).map(piecePolygon);
+  const movers = pieces.filter((p) => set.has(p.id));
+  const place = (off: Vec) =>
+    clampAll(
+      pieces.map((p) => (set.has(p.id) ? { ...p, x: p.x + off[0], y: p.y + off[1] } : p)),
+      set,
+      board,
+    );
+  let off: Vec = want;
+  for (let i = 0; i < MAX_ITER; i++) {
+    const polys = movers.map((p) => piecePolygon({ ...p, x: p.x + off[0], y: p.y + off[1] }));
+    // push out of the deepest overlap first; repeat until clear (a snug slot settles between walls)
+    let push: Vec | null = null;
+    for (const m of polys) {
+      for (const o of others) {
+        const v = mtv(o, m);
+        if (v && (!push || len(v) > len(push))) push = v;
+      }
+    }
+    if (!push) {
+      if (len(sub(off, want)) > FIT_NUDGE) return null;
+      const out = place(off);
+      return hasOverlap(out) ? null : out;
+    }
+    off = [off[0] + push[0], off[1] + push[1]];
+  }
+  return null;
+}
+
 /**
  * Replace some pieces' states (rotation/flip/snap) and push neighbours away. If that's
  * impossible because the changed pieces now hit something immovable (a piece locked to the
