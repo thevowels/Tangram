@@ -95,6 +95,9 @@ Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pull
 - **What moves:** `resolve(pieces, fixed)`, `moveWithPush(pieces, ids, …)` and `transformWithPush(pieces, states[])` all accept several pieces, which then move as one rigid body. Those `fixed` pieces are excluded from grouping during the move, so nothing new latches onto the body mid-drag.
 - `resolve()` returns `null` when it can't settle, e.g. pieces jammed against a wall.
 - `moveWithPush()` subdivides a drag into ≤0.2-unit steps so pieces can't tunnel. Each step tries the direct move, then axis-aligned slides, then bisects toward the furthest valid point.
+- **Drags go through `dragTo()`, which forgives an imprecise hand.** It runs `moveWithPush()` first. If that is blocked short of the finger (a locked neighbour, or a gap only just wide enough), `fitAt()` puts the dragged pieces right at the finger and nudges them up to `FIT_NUDGE` (0.3) out of everything else, which stays put. Whichever ends closer to the finger wins.
+  - Without it a snug spot can only be entered along a perfect path: a hair of wobble catches a neighbour's corner and the piece stops at the entrance. A test drags the last piece of every puzzle in along a wobbly path; plain `moveWithPush` finished 92/342 from the tray and 207/266 on a short approach, `dragTo` finishes all of them with no overlaps at any step (`src/fit.test.ts`).
+  - A side effect: a piece can hop over a locked figure to a free spot under the finger, which keeps the piece under the finger rather than stuck behind the figure.
 - `transformWithPush()` is used for rotate/flip/snap; a `null` result means the action is rejected.
 - Touching (overlap ≤ `EPS`) is not a collision. That is what lets snapped pieces sit flush.
 
