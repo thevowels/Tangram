@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { bounds, toPath, type Poly } from "../geometry/polygon";
 import type { Puzzle } from "../game/check";
+import { medal, MEDAL_NAME } from "../game/medals";
+import { Medal } from "./Medal";
 
 interface Props {
   puzzles: Puzzle[];
@@ -107,7 +109,17 @@ export function PuzzlePicker({ puzzles, solved, onPick, onHowTo }: Props) {
                 >
                   <Thumb loops={p.polygons} />
                   <span className="card-name">{p.name}</span>
-                  {p.id in solved && <span className="card-badge">✓ {formatTime(solved[p.id])}</span>}
+                  {p.id in solved && (
+                    <>
+                      <span className="card-medal">
+                        <Medal
+                          tier={medal(solved[p.id], p)}
+                          label={`${MEDAL_NAME[medal(solved[p.id], p)]} medal, best ${formatTime(solved[p.id])}`}
+                        />
+                      </span>
+                      <span className={`card-time ${medal(solved[p.id], p)}`}>{formatTime(solved[p.id])}</span>
+                    </>
+                  )}
                   {stats[p.id] && (
                     <span className="card-stats">
                       {formatCount(stats[p.id].solvers)} solved · avg {formatTime(stats[p.id].avgMs)}

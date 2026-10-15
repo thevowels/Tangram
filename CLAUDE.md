@@ -166,7 +166,8 @@ Any arrangement whose shape matches the silhouette wins.
   - `newlyEarned(before, after)` drives the unlock toast (`BadgeToast`). The header chip opens `BadgesSheet`.
   - Hints never name a specific puzzle.
   - The rules are pure, so the planned D1 backend can reuse them.
-- **Picker:** category headers show `n/total` with a meter. The wordmark hides ≤430px so the badge chip fits.
+- **Picker:** category headers show `n/total` with a meter. Solved cards show a speed medal (`Medal`, `game/medals.ts`) in the corner and the best time under the name.
+- **Medals:** gold at or under the puzzle's `par()`, silver within twice par, bronze beyond. Par is 30 s + 6 s per outline corner, with `PAR_OVERRIDE` for shapes harder than they look (Square, Triangle). Fixed rules, so a medal never drops; retune par from `npm run analytics`. The wordmark hides ≤430px so the badge chip fits.
 
 **State/UI** (`src/App.tsx`). The `usePieces` hook owns piece state, the selection, and the rotate/flip commands, and handles layout remapping. It returns `boardProps` to spread onto `<Board>`. `Board` reports live drag updates via `onChange` and finished moves via `onSettle`; puzzle mode runs `evaluate()` in `onSettle`. Persistence is localStorage (`src/storage.ts`): designs, deleted-design markers, progress v2 (see Progress & badges), tip flags. Optional cloud sync on top of it is described under Accounts & sync.
 
@@ -194,7 +195,10 @@ Any arrangement whose shape matches the silhouette wins.
 - The theme is dark violet. `body` carries the gradient and dot-grid backdrop (`background-attachment: fixed`), and nothing frames the play area.
 - Piece colours live in `PIECES` (`geometry/pieces.ts`) and are reused by the logo, the confetti and the picker card accents. `Board` turns each colour into a glossy `linearGradient` (`#tan-<id>`, via `mix()`).
 - Buttons are translucent "glass" (`--glass*` variables); primary actions use the `--hot` gradient.
-- The silhouette is a translucent fill with a dashed outline. Once solved, the figure pulses with a glow (`.pieces.solved-figure`) and `Confetti` plays.
+- The silhouette is a translucent fill with a dashed outline. Once solved, the finish is deliberately calm (no confetti):
+  - the shadow fades away (`.guide.solved`), the figure glows softly (`.pieces.solved-figure`);
+  - a quiet caption (`.finish`) fades in with the medal, puzzle, time, a "new best" tag (against the `best` prop, captured at mount) and the buttons.
+  - The caption sits in the space the tray leaves free, measured from the drawn shadow: beside the figure in landscape, below it in portrait, so it never covers the figure. The tutorial uses the same caption.
 - SVG `filter: drop-shadow(...)` lengths on pieces are in board units, not screen px, so they are tiny values like `0.1px`.
 - **No spilling effects on resting pieces.** A drop shadow or outer glow on one piece paints over its neighbour along a shared edge, so two pieces meeting edge to edge look like one overlaps the other. So:
   - resting pieces have no shadow (only `.lifted`, while dragging);
