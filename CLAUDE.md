@@ -195,10 +195,14 @@ Any arrangement whose shape matches the silhouette wins.
 - The theme is dark violet. `body` carries the gradient and dot-grid backdrop (`background-attachment: fixed`), and nothing frames the play area.
 - Piece colours live in `PIECES` (`geometry/pieces.ts`) and are reused by the logo, the confetti and the picker card accents. `Board` turns each colour into a glossy `linearGradient` (`#tan-<id>`, via `mix()`).
 - Buttons are translucent "glass" (`--glass*` variables); primary actions use the `--hot` gradient.
-- The silhouette is a translucent fill with a dashed outline. Once solved, the finish is deliberately calm (no confetti):
-  - the shadow fades away (`.guide.solved`), the figure glows softly (`.pieces.solved-figure`);
-  - a quiet caption (`.finish`) fades in with the medal, puzzle, time, a "new best" tag (against the `best` prop, captured at mount) and the buttons.
-  - The caption sits in the space the tray leaves free, measured from the drawn shadow: beside the figure in landscape, below it in portrait, so it never covers the figure. The tutorial uses the same caption.
+- The silhouette is a translucent fill with a dashed outline. On solve, the shadow fades away (`.guide.solved`) and the figure glows softly (`.pieces.solved-figure`).
+- **Celebration** (`components/Celebration.tsx`). Nothing covers the finished figure: the player gets to enjoy the shape they made.
+  - The caption's medal (`RevealMedal`) drops in on its ribbon, spins, and a glint crosses the disc; "Gold!" etc. sits beside it.
+  - **Effect, swappable:** `CELEBRATION_EFFECT` is `"flakes"` (bright gold foil flakes and glitter, like birthday confetti, fluttering down over the board) or `"shine"` (rays turning behind the caption's medal, with twinkling sparkles). Change that one constant to swap.
+  - The flakes' shimmer animates only transform and opacity (GPU-friendly); a per-flake filter would repaint every frame on phones.
+  - `prefers-reduced-motion` drops the flakes.
+- **Medal** (`components/Medal.tsx`): a prize medal like 🥇: red and blue ribbon straps (piece colours) holding a metal disc with its place (1, 2, 3). On cards it hangs from the top edge and swings on hover. Its fills are inline so the picker's `.card svg` rules can't repaint it.
+- **Caption** (`.finish`): the medal, "Gold!", puzzle, time, a "new best" tag (against the `best` prop, captured at mount) and the buttons. It sits in the space the tray leaves free, measured from the drawn shadow: beside the figure in landscape, below it in portrait, never over it.
 - SVG `filter: drop-shadow(...)` lengths on pieces are in board units, not screen px, so they are tiny values like `0.1px`.
 - **No spilling effects on resting pieces.** A drop shadow or outer glow on one piece paints over its neighbour along a shared edge, so two pieces meeting edge to edge look like one overlaps the other. So:
   - resting pieces have no shadow (only `.lifted`, while dragging);

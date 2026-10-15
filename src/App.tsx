@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Board } from "./components/Board";
-import { Medal } from "./components/Medal";
+import { CelebrationLayer, RevealMedal } from "./components/Celebration";
 import { medal, MEDAL_NAME } from "./game/medals";
 import { Logo } from "./components/Logo";
 import { formatTime, PuzzlePicker } from "./components/PuzzlePicker";
@@ -440,6 +440,7 @@ function PuzzlePlay({
   // the finish caption goes in the space the tray leaves free: beside the figure in landscape,
   // below it in portrait (measured from the drawn shadow, which is where the figure ends up)
   const [finishBox, setFinishBox] = useState<React.CSSProperties | undefined>();
+  const isNewBest = solvedIn !== null && previousBest.current !== undefined && Math.round(solvedIn) < previousBest.current;
   useLayoutEffect(() => {
     const stage = stageRef.current;
     const shadow = svgRef.current?.querySelector(".guide");
@@ -509,10 +510,12 @@ function PuzzlePlay({
           />
         )}
         {!lesson && <JointTip />}
+        {/* gold flakes over the board; nothing covers the figure itself */}
+        {solvedIn !== null && <CelebrationLayer />}
         {tutorial && solvedIn !== null && (
           <div className="finish" role="status" style={finishBox}>
             <p className="finish-line">
-              <strong>You're ready!</strong>
+              <strong>🎉 You're ready!</strong>
             </p>
             <p className="finish-note">
               Pieces that share an edge stick together: drag the thin line between them to move them as one.
@@ -528,15 +531,17 @@ function PuzzlePlay({
         {!lesson && solvedIn !== null && (
           <div className="finish" role="status" style={finishBox}>
             <p className="finish-line">
-              <Medal tier={medal(solvedIn, puzzle)} size={30} label={`${MEDAL_NAME[medal(solvedIn, puzzle)]} medal`} />
+              <RevealMedal
+                tier={medal(solvedIn, puzzle)}
+                label={`${MEDAL_NAME[medal(solvedIn, puzzle)]} medal`}
+              />
+              <span className={`finish-tier ${medal(solvedIn, puzzle)}`}>{MEDAL_NAME[medal(solvedIn, puzzle)]}!</span>
               <span>{puzzle.name}</span>
               <span className="finish-dot" aria-hidden>
                 ·
               </span>
               <strong>{formatTime(solvedIn)}</strong>
-              {previousBest.current !== undefined && Math.round(solvedIn) < previousBest.current && (
-                <span className="finish-best">new best</span>
-              )}
+              {isNewBest && <span className="finish-best">new best</span>}
             </p>
             <div className="finish-actions">
               <button className="primary" onClick={onNext}>

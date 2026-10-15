@@ -603,6 +603,195 @@ button.primary:hover:not(:disabled) {
   justify-content: center;
 }
 
+/* ---- celebration (CELEBRATION_EFFECT): nothing covers the finished figure ---- */
+
+.finish-tier {
+  font-weight: 900;
+}
+
+.finish-tier.gold {
+  color: #ffd166;
+}
+
+.finish-tier.silver {
+  color: #e3e8f0;
+}
+
+.finish-tier.bronze {
+  color: #f0a86e;
+}
+
+/* the caption's medal: drops in on its ribbon, spins, then a glint crosses the disc */
+.reveal-medal {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+}
+
+.reveal-medal-pop {
+  position: relative;
+  display: grid;
+  transform-origin: 50% 0;
+  filter: drop-shadow(0 4px 8px rgb(0 0 0 / 0.45));
+  animation: medal-in 0.8s cubic-bezier(0.25, 1.6, 0.45, 1) 0.6s backwards;
+}
+
+.reveal-medal-pop .medal {
+  animation: medal-spin 1s cubic-bezier(0.3, 0.8, 0.3, 1) 0.65s backwards;
+}
+
+/* the glint, sized to the disc (the lower 3/4 of the medal's width) */
+.reveal-medal-pop::after {
+  content: "";
+  position: absolute;
+  left: 12%;
+  right: 12%;
+  bottom: 2%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.85) 50%, transparent 65%);
+  background-size: 300% 100%;
+  background-position: 100% 0;
+  opacity: 0;
+  animation: medal-glint 0.8s ease-in-out 1.5s;
+}
+
+@keyframes medal-in {
+  from {
+    opacity: 0;
+    transform: translateY(-36px) scale(0.4);
+  }
+}
+
+@keyframes medal-spin {
+  from {
+    transform: perspective(200px) rotateY(-540deg);
+  }
+}
+
+@keyframes medal-glint {
+  from {
+    opacity: 1;
+    background-position: 100% 0;
+  }
+  to {
+    opacity: 1;
+    background-position: 0 0;
+  }
+}
+
+/* gold foil flakes, like birthday confetti: bright, catching the light as they flip */
+.flakes {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.flakes span {
+  position: absolute;
+  top: -16px;
+  border-radius: 1px;
+  will-change: transform, translate, opacity;
+  animation-name: flake-fall, flake-flutter;
+  animation-timing-function: linear, ease-in-out;
+  animation-iteration-count: 1, infinite;
+  animation-direction: normal, alternate;
+  animation-fill-mode: both, none;
+}
+
+.flakes span.glitter {
+  border-radius: 50%;
+  box-shadow:
+    0 0 6px 2px rgb(255 240 180 / 0.9),
+    0 0 14px rgb(255 200 60 / 0.6);
+}
+
+@keyframes flake-fall {
+  from {
+    translate: 0 0;
+    rotate: 0deg;
+  }
+  85% {
+    opacity: 1;
+  }
+  to {
+    translate: var(--sway) calc(100vh + 32px);
+    rotate: var(--spin);
+    opacity: 0;
+  }
+}
+
+/* the flip: edge-on and dim, then face-on and flashing bright (transform + opacity only, so
+   the GPU does it: a filter on every flake would repaint each frame on phones) */
+@keyframes flake-flutter {
+  from {
+    transform: rotateX(75deg) scaleY(0.35);
+    opacity: 0.7;
+  }
+  to {
+    transform: rotateX(0deg) scaleY(1);
+    opacity: 1;
+  }
+}
+
+/* shine: soft rays turning behind the caption's medal, with twinkling sparkles */
+.shine {
+  position: absolute;
+  left: 50%;
+  top: 62%;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.shine-rays {
+  position: absolute;
+  left: -60px;
+  top: -60px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgb(255 214 120 / 0.45) 0deg 9deg, transparent 9deg 24deg);
+  mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation:
+    rays-in 0.6s ease-out 0.7s backwards,
+    rays-turn 10s linear infinite;
+}
+
+@keyframes rays-in {
+  from {
+    opacity: 0;
+    scale: 0.3;
+  }
+}
+
+@keyframes rays-turn {
+  to {
+    rotate: 360deg;
+  }
+}
+
+.sparkle {
+  position: absolute;
+  margin: -5px;
+  background: #fff;
+  clip-path: polygon(50% 0, 60% 40%, 100% 50%, 60% 60%, 50% 100%, 40% 60%, 0 50%, 40% 40%);
+  animation: twinkle 1s ease-in-out infinite alternate;
+}
+
+@keyframes twinkle {
+  from {
+    opacity: 0.1;
+    scale: 0.4;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
 /* ---- puzzle picker ---- */
 
 .picker-hero {
@@ -724,9 +913,8 @@ button.primary:hover:not(:disabled) {
     transform: none;
   }
 
-  .card:hover .card-medal::after {
-    transform: translateX(120%);
-    transition: transform 0.6s ease;
+  .card:hover .card-medal {
+    animation: medal-swing 0.9s ease-in-out;
   }
 }
 
@@ -736,23 +924,23 @@ button.primary:hover:not(:disabled) {
   font-weight: 700;
 }
 
+/* the medal hangs from the card's top edge by its ribbon */
 .card-medal {
   position: absolute;
-  top: 7px;
-  right: 7px;
+  top: -1px;
+  right: 10px;
   display: grid;
-  overflow: hidden;
-  border-radius: 50%;
-  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.4));
+  transform-origin: 50% 0;
+  filter: drop-shadow(0 3px 4px rgb(0 0 0 / 0.45));
 }
 
-/* a glint that sweeps across the medal on hover */
-.card-medal::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.75) 50%, transparent 65%);
-  transform: translateX(-120%);
+@keyframes medal-swing {
+  25% {
+    rotate: 9deg;
+  }
+  60% {
+    rotate: -6deg;
+  }
 }
 
 .card-time {

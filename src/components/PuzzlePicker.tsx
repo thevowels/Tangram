@@ -113,6 +113,7 @@ export function PuzzlePicker({ puzzles, solved, onPick, onHowTo }: Props) {
                     <>
                       <span className="card-medal">
                         <Medal
+                          size={30}
                           tier={medal(solved[p.id], p)}
                           label={`${MEDAL_NAME[medal(solved[p.id], p)]} medal, best ${formatTime(solved[p.id])}`}
                         />
