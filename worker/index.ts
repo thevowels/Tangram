@@ -36,11 +36,13 @@ async function authenticate(req: Request, env: Env): Promise<string | null> {
 }
 
 async function readPayload(env: Env, player: string): Promise<SyncPayload> {
-  const [solves, designs, counters] = await env.DB.batch([
+  const [solves, designs, counters, who] = await env.DB.batch([
     env.DB.prepare("SELECT puzzle_id, best_ms, first_on FROM solves WHERE player_id = ?").bind(player),
     env.DB.prepare("SELECT name, data, saved_at FROM designs WHERE player_id = ? ORDER BY saved_at DESC").bind(player),
     env.DB.prepare("SELECT designs_saved, exports FROM counters WHERE player_id = ?").bind(player),
+    env.DB.prepare("SELECT nickname, nickname_at FROM players WHERE id = ?").bind(player),
   ]);
+  const n = who.results[0] as { nickname: string | null; nickname_at: number | null } | undefined;
   const s = solves.results as {
     puzzle_id: string;
     best_ms: number;
@@ -67,6 +69,7 @@ async function readPayload(env: Env, player: string): Promise<SyncPayload> {
       savedAt: r.saved_at,
       data: JSON.parse(r.data),
     })),
+    ...(n?.nickname ? { nickname: { name: n.nickname, at: n.nickname_at ?? 0 } } : {}),
   };
 }
 
@@ -124,6 +127,14 @@ async function putPayload(env: Env, player: string, incoming: SyncPayload): Prom
     );
   }
 
+  if (merged.nickname && merged.nickname.at !== stored.nickname?.at) {
+    writes.push(
+      db
+        .prepare("UPDATE players SET nickname = ?, nickname_at = ? WHERE id = ? AND coalesce(nickname_at, -1) < ?")
+        .bind(merged.nickname.name, merged.nickname.at, player, merged.nickname.at),
+    );
+  }
+
   if (writes.length) {
     writes.push(db.prepare("UPDATE players SET updated_at = ? WHERE id = ?").bind(Date.now(), player));
     await db.batch(writes);
@@ -148,6 +159,30 @@ async function deletePlayer(env: Env, player: string) {
   );
 }
 
+/** Solvers shown per puzzle only from this many, so no one's own time can be read off a card. */
+const MIN_SOLVERS = 5;
+/** Times above this count as this in the average, so one forgotten tab doesn't skew it. */
+const AVG_CAP_MS = 10 * 60_000;
+const STATS_TTL = 300;
+
+/** Per-puzzle solver counts and average best times, cached for a few minutes at the edge. */
+async function stats(env: Env): Promise<Response> {
+  const cache = caches.default;
+  const key = new Request("https://stats.cache/api/stats");
+  const hit = await cache.match(key);
+  if (hit) return hit;
+  const { results } = await env.DB.prepare(
+    `SELECT puzzle_id AS id, count(*) AS solvers, avg(min(best_ms, ?)) AS avg_ms
+     FROM solves GROUP BY puzzle_id HAVING count(*) >= ?`,
+  )
+    .bind(AVG_CAP_MS, MIN_SOLVERS)
+    .all<{ id: string; solvers: number; avg_ms: number }>();
+  const body = Object.fromEntries(results.map((r) => [r.id, { solvers: r.solvers, avgMs: Math.round(r.avg_ms) }]));
+  const res = Response.json(body, { headers: { "cache-control": `public, max-age=${STATS_TTL}` } });
+  await cache.put(key, res.clone());
+  return res;
+}
+
 async function readBody(req: Request): Promise<unknown> {
   const text = await req.text();
   if (text.length > LIMITS.maxBodyBytes) return undefined;
@@ -160,6 +195,7 @@ async function readBody(req: Request): Promise<unknown> {
 
 async function api(req: Request, env: Env, path: string): Promise<Response> {
   if (path === "/api/health") return json({ ok: true });
+  if (path === "/api/stats" && req.method === "GET") return stats(env);
 
   const ip = clientIp(req);
   if (!(await env.API_LIMIT.limit({ key: ip })).success) return error(429, "Too many requests");

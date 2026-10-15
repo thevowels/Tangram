@@ -711,6 +711,16 @@ button.primary:hover:not(:disabled) {
   color: var(--accent);
 }
 
+.card-stats {
+  position: relative;
+  margin-top: -4px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 /* ---- free play designs ---- */
 
 .designs {
@@ -1144,6 +1154,112 @@ kbd {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* ---- nickname ---- */
+
+.nickname-sheet {
+  width: min(420px, 100%);
+  display: grid;
+  gap: 12px;
+  text-align: center;
+  padding: 24px 22px 20px;
+}
+
+.nickname-sheet h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 900;
+}
+
+.nickname-sheet p {
+  margin: 0;
+}
+
+.nickname-sheet .muted {
+  color: var(--muted);
+}
+
+.nickname-sheet .small {
+  font-size: 0.8rem;
+}
+
+.nickname-hero {
+  font-size: 2.6rem;
+  line-height: 1;
+}
+
+.nickname-form {
+  display: grid;
+  gap: 10px;
+}
+
+.nickname-row {
+  display: flex;
+  gap: 8px;
+}
+
+.nickname-row input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-line);
+  background: rgb(0 0 0 / 0.25);
+  color: inherit;
+  font: inherit;
+  font-size: 16px; /* stops iOS zooming into the field */
+  font-weight: 700;
+}
+
+.nickname-row input::placeholder {
+  color: rgb(244 240 255 / 0.45);
+}
+
+.nickname-error {
+  margin: 0;
+  color: #ff8fa3;
+  font-size: 0.85rem;
+}
+
+.nickname-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.nickname-sheet .nickname-actions button {
+  flex: 1;
+}
+
+.nickname-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border-radius: 16px;
+  background: var(--glass);
+  border: 1px solid var(--glass-line);
+}
+
+.nickname-line strong {
+  flex: 1;
+}
+
+.nickname-edit {
+  margin-bottom: 12px;
+}
+
+.nickname-line button.link {
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  backdrop-filter: none;
+  color: var(--muted);
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ---- sync (in the badges sheet) ---- */

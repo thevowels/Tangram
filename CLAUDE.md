@@ -227,3 +227,15 @@ Any arrangement whose shape matches the silhouette wins.
 - **UI** (`SyncPanel` in `components/Badges.tsx`, at the bottom of the badges sheet): the code with Copy and a QR; "I have a code from another device"; "Delete my online data" (two-step; sets `off` so no new account is created until "Turn sync back on").
   - The QR encodes `SITE_URL/#sync=<code>`. A fragment, so the code never reaches server logs. `codeFromUrl()` reads it once, strips it, and opens the sheet with the code ready to use.
   - Using another code uploads this device's progress into that account, then deletes this device's old account.
+
+**Nickname** (`components/Nickname.tsx`, `game/names.ts`, `cleanNickname` in `shared/progress.ts`):
+- **First visit:** `NicknamePrompt` asks for a name, with a random "Adjective Animal" suggestion as the placeholder (🎲 rolls another). Leaving it blank, or Esc, keeps the suggestion, so the prompt never returns. It's skipped when arriving with a `#sync=` code, since the account brings its own name.
+- **Changing it:** the `NicknameRow` at the top of the badges sheet.
+- **Rules (`cleanNickname`, applied on both client and server):** 1–20 characters; letters and marks in any script, digits, spaces and `._'-`; invisible and control characters are removed; a short blocked-word list is matched with spaces and punctuation squashed out.
+- **Stored** as `tangram.nickname` = `{ name, at }` and synced in the progress payload (`players.nickname`, `nickname_at`). The latest `at` wins. A typed name gets `Date.now()`, an untouched suggestion gets `at: 0`, so a random name on a new device never overwrites a chosen one; ties go to the smaller name so both sides agree.
+- **Where it shows:** export captions ("Solved by Aung in 0:42", "Made by Aung in free play"). It is never shown to other players.
+
+**Global stats** (`GET /api/stats`, `useGlobalStats` in `PuzzlePicker.tsx`):
+- Per puzzle: synced solvers and the average best time (each time capped at `AVG_CAP_MS`, 10 min, so a forgotten tab doesn't skew it). Cards show "12 solved · avg 1:35".
+- Only puzzles with ≥ `MIN_SOLVERS` (5) are returned, so no single player's time can be read off a card.
+- Cached at the edge for `STATS_TTL` (5 min) with the Cache API; it is served before the rate limiter. Offline, cards just show nothing.
