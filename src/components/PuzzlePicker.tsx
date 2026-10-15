@@ -44,9 +44,20 @@ export function PuzzlePicker({ puzzles, solved, onPick }: Props) {
           </span>
         </div>
       </div>
-      {[...new Set(puzzles.map((p) => p.category))].map((category, ci) => (
+      {[...new Set(puzzles.map((p) => p.category))].map((category, ci) => {
+        const inCat = puzzles.filter((p) => p.category === category);
+        const doneInCat = inCat.filter((p) => p.id in solved).length;
+        return (
         <section key={category} className="picker-section">
-          <h3>{category}</h3>
+          <h3>
+            <span>{category}</span>
+            <span className={"cat-progress" + (doneInCat === inCat.length ? " complete" : "")}>
+              {doneInCat}/{inCat.length}
+              <span className="meter" aria-hidden>
+                <span style={{ width: `${(doneInCat / inCat.length) * 100}%` }} />
+              </span>
+            </span>
+          </h3>
           <div className="picker-grid">
             {puzzles
               .filter((p) => p.category === category)
@@ -64,7 +75,8 @@ export function PuzzlePicker({ puzzles, solved, onPick }: Props) {
               ))}
           </div>
         </section>
-      ))}
+        );
+      })}
     </div>
   );
 }

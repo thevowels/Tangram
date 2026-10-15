@@ -22,7 +22,19 @@ import {
 } from "./game/layout";
 import { piecePolygon, type PieceState } from "./geometry/pieces";
 import { bounds, type Poly } from "./geometry/polygon";
-import { loadDesigns, loadSolved, saveDesigns, saveSolved, type Design } from "./storage";
+import {
+  bestTimes,
+  bump,
+  loadDesigns,
+  loadProgress,
+  recordSolve,
+  saveDesigns,
+  saveProgress,
+  type Design,
+  type Progress,
+} from "./storage";
+import { computeBadges, newlyEarned, type Badge } from "./game/badges";
+import { BadgesSheet, BadgeToast } from "./components/Badges";
 import puzzlesJson from "./data/puzzles.json";
 
 const PUZZLES = puzzlesJson as unknown as Puzzle[];
@@ -158,7 +170,7 @@ function usePieces(
   return { pieces, selected, doRotate, doFlip, reset, replace: setPieces, boardProps };
 }
 
-function FreePlay() {
+function FreePlay({ onTrack }: { onTrack(kind: "designsSaved" | "exports"): void }) {
   const stageRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const layout = useFitLayout(stageRef);
@@ -175,6 +187,7 @@ function FreePlay() {
     setDesigns(next);
     saveDesigns(next);
     setName("");
+    onTrack("designsSaved");
   };
 
   const load = (d: Design) => {
@@ -191,6 +204,7 @@ function FreePlay() {
 
   const exportPng = () => {
     if (!svgRef.current || !layout) return;
+    onTrack("exports");
     void exportBoardImage(svgRef.current, layout.board, {
       filename: "tangram.jpg",
       caption: { title: "My Tangram", subtitle: "Made in free play" },
@@ -248,11 +262,13 @@ function FreePlay() {
 function PuzzlePlay({
   puzzle,
   onSolved,
+  onTrack,
   onNext,
   onBack,
 }: {
   puzzle: Puzzle;
   onSolved(ms: number): void;
+  onTrack(kind: "exports"): void;
   onNext(): void;
   onBack(): void;
 }) {
@@ -322,6 +338,7 @@ function PuzzlePlay({
     if (!svgRef.current || !layout || !guide || !g.pieces) return;
     const b = bounds([...guide, ...g.pieces.map(piecePolygon)]);
     const pad = 0.5;
+    onTrack("exports");
     void exportBoardImage(svgRef.current, layout.board, {
       filename: `tangram-${puzzle.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.jpg`,
       crop: { minX: b.minX - pad, minY: b.minY - pad, maxX: b.maxX + pad, maxY: b.maxY + pad },
@@ -401,19 +418,32 @@ export default function App() {
     const want = mode === "puzzles" && puzzle ? `?p=${puzzle.id}` : "";
     if (location.search !== want) history.replaceState(null, "", location.pathname + want);
   }, [mode, puzzle]);
-  const [solved, setSolved] = useState<Record<string, number>>(loadSolved);
   const touch = useMedia("(pointer: coarse)");
+  const [progress, setProgress] = useState<Progress>(loadProgress);
+  const progressRef = useRef(progress);
+  const solved = useMemo(() => bestTimes(progress), [progress]);
+  const badges = useMemo(() => computeBadges(progress, PUZZLES), [progress]);
+  const [toasts, setToasts] = useState<Badge[]>([]);
+  const [showBadges, setShowBadges] = useState(false);
+
+  /** Apply a change to progress: save it, and celebrate any badge it unlocks. */
+  const updateProgress = useCallback((change: (p: Progress) => Progress) => {
+    const before = progressRef.current;
+    const after = change(before);
+    progressRef.current = after;
+    setProgress(after);
+    saveProgress(after);
+    const fresh = newlyEarned(before, after, PUZZLES);
+    if (fresh.length) setToasts((t) => [...t, ...fresh]);
+  }, []);
+  const dismissToast = useCallback(() => setToasts((t) => t.slice(1)), []);
+  const track = useCallback((kind: "designsSaved" | "exports") => updateProgress((p) => bump(p, kind)), [updateProgress]);
 
   const onSolved = useCallback(
     (ms: number) => {
-      if (!puzzle) return;
-      setSolved((s) => {
-        const next = { ...s, [puzzle.id]: Math.min(ms, s[puzzle.id] ?? Infinity) };
-        saveSolved(next);
-        return next;
-      });
+      if (puzzle) updateProgress((p) => recordSolve(p, puzzle.id, ms));
     },
-    [puzzle],
+    [puzzle, updateProgress],
   );
 
   const next = () => {
@@ -431,6 +461,10 @@ export default function App() {
           <Logo />
           <h1>Tangram</h1>
         </div>
+        <button className="badge-chip" onClick={() => setShowBadges(true)} aria-label="Badges">
+          <span aria-hidden>🏅</span> {badges.filter((b) => b.earned).length}
+          <small>/{badges.length}</small>
+        </button>
         <nav>
           <button className={mode === "puzzles" ? "active" : ""} onClick={() => setMode("puzzles")}>
             Puzzles
@@ -441,14 +475,23 @@ export default function App() {
         </nav>
       </header>
       <main>
-        {mode === "free" && <FreePlay />}
+        {mode === "free" && <FreePlay onTrack={track} />}
         {mode === "puzzles" &&
           (puzzle ? (
-            <PuzzlePlay key={puzzle.id} puzzle={puzzle} onSolved={onSolved} onNext={next} onBack={() => setPuzzle(null)} />
+            <PuzzlePlay
+              key={puzzle.id}
+              puzzle={puzzle}
+              onSolved={onSolved}
+              onTrack={track}
+              onNext={next}
+              onBack={() => setPuzzle(null)}
+            />
           ) : (
             <PuzzlePicker puzzles={PUZZLES} solved={solved} onPick={setPuzzle} />
           ))}
       </main>
+      {showBadges && <BadgesSheet badges={badges} onClose={() => setShowBadges(false)} />}
+      <BadgeToast badge={toasts[0]} onDone={dismissToast} />
       <footer>
         {touch ? (
           <>

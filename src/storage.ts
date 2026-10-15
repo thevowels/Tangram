@@ -29,6 +29,59 @@ export const loadDesigns = () =>
   );
 export const saveDesigns = (d: Design[]) => localStorage.setItem(DESIGNS, JSON.stringify(d));
 
-/** puzzle id → best time in ms */
-export const loadSolved = () => read<Record<string, number>>(SOLVED, {});
-export const saveSolved = (s: Record<string, number>) => localStorage.setItem(SOLVED, JSON.stringify(s));
+// ---- progress (v2): what badges and stats are computed from ----
+
+const PROGRESS = "tangram.progress";
+
+export interface SolveRecord {
+  /** best time in ms */
+  best: number;
+  /** local date of the first solve, YYYY-MM-DD */
+  first: string;
+}
+
+export interface Progress {
+  v: 2;
+  solved: Record<string, SolveRecord>;
+  designsSaved: number;
+  exports: number;
+}
+
+/** Today's local date as YYYY-MM-DD. */
+export const today = (d = new Date()) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+/** Build v2 progress from the old `tangram.solved` map ({id: bestMs}); dates unknown → `day`. */
+export function migrateProgress(oldSolved: Record<string, number>, designs: number, day: string): Progress {
+  return {
+    v: 2,
+    solved: Object.fromEntries(Object.entries(oldSolved).map(([id, best]) => [id, { best, first: day }])),
+    designsSaved: designs,
+    exports: 0,
+  };
+}
+
+export function loadProgress(): Progress {
+  const p = read<Progress | null>(PROGRESS, null);
+  if (p?.v === 2) return p;
+  const migrated = migrateProgress(read<Record<string, number>>(SOLVED, {}), loadDesigns().length, today());
+  saveProgress(migrated);
+  return migrated;
+}
+
+export const saveProgress = (p: Progress) => localStorage.setItem(PROGRESS, JSON.stringify(p));
+
+/** A solve: keeps the best time and the first day. */
+export function recordSolve(p: Progress, id: string, rawMs: number, day = today()): Progress {
+  const ms = Math.round(rawMs);
+  const prev = p.solved[id];
+  return {
+    ...p,
+    solved: { ...p.solved, [id]: prev ? { best: Math.min(prev.best, ms), first: prev.first } : { best: ms, first: day } },
+  };
+}
+
+export const bump = (p: Progress, key: "designsSaved" | "exports"): Progress => ({ ...p, [key]: p[key] + 1 });
+
+/** puzzle id → best time in ms (what the picker shows). */
+export const bestTimes = (p: Progress) => Object.fromEntries(Object.entries(p.solved).map(([id, r]) => [id, r.best]));
