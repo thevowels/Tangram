@@ -8,7 +8,7 @@ import { JointTip } from "./components/Tip";
 import { exportBoardImage } from "./exportImage";
 import { puzzleIdFromUrl, puzzleLink, SITE_URL } from "./site";
 import { flip, rotate } from "./game/actions";
-import { centreOn, evaluate, perfectFit, settleFlush, slotSnap, type Puzzle } from "./game/check";
+import { centreOn, evaluate, fitToOutline, perfectFit, settleFlush, slotSnap, type Puzzle } from "./game/check";
 import {
   figureExtent,
   fitLayout,
@@ -286,10 +286,19 @@ function PuzzlePlay({
       if (solved) {
         // close the last little gaps: every piece clicks into its exact place (100% match)
         // ...and wherever it was built, the finished figure glides onto the outline
+        // the stored solution clicks in exactly; any other valid arrangement is moved onto the
+        // outline and fitted edge to edge (the outline anchors it), with a plain snap as last resort
         const exact = perfectFit(pieces, puzzle.solution, layout?.target);
-        const flush = exact ? null : settleFlush(pieces, guide);
-        replacePieces.current(exact ?? (layout ? centreOn(flush!, layout.target) : flush!));
-        if (exact) setMatch(1); // exact geometry: a true 100%
+        let finished = exact;
+        let locked = !!exact;
+        if (!finished) {
+          const onOutline = layout ? centreOn(pieces, layout.target) : pieces;
+          const fitted = fitToOutline(onOutline, guide);
+          locked = fitted !== onOutline;
+          finished = locked ? fitted : settleFlush(onOutline, guide);
+        }
+        replacePieces.current(finished);
+        if (locked) setMatch(1); // locked exactly to the outline: a true 100%
         const ms = performance.now() - start.current;
         setSolvedIn(ms);
         onSolved(ms);

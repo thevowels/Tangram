@@ -3,7 +3,7 @@ import { PIECES, piecePolygon, pieceTransform, squareLayout, type PieceState } f
 import { area, bounds, cornerJoints, groupCentroid, mtv, sharedEdges, type Poly } from "./geometry/polygon";
 import { findSnap } from "./geometry/snap";
 import { groupOf, hasOverlap, isLocked, moveWithPush, transformWithPush } from "./physics/resolve";
-import { centreOn, coverage, evaluate, perfectFit, settleFlush, slotSnap, type Puzzle } from "./game/check";
+import { centreOn, coverage, evaluate, fitToOutline, perfectFit, settleFlush, slotSnap, type Puzzle } from "./game/check";
 import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
@@ -489,5 +489,45 @@ describe("pieces pull into their exact spot when close", () => {
       expect(p.x).toBeCloseTo(slot(p.id).x, 9);
       expect(p.y).toBeCloseTo(slot(p.id).y, 9);
     });
+  });
+});
+
+describe("finishing locks any valid arrangement edge to edge", () => {
+  let seed = 11;
+  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647) * 2 - 1;
+
+  for (const p of puzzles) {
+    it(`${p.name}: knocked-loose pieces fit back exactly without the stored solution`, () => {
+      const outline = p.polygons as Poly[];
+      const loose = p.solution.map((s) => ({ ...s, x: s.x + rand() * 0.12, y: s.y + rand() * 0.12 }));
+      const fitted = fitToOutline(loose, outline);
+      // back on its exact spot, edge to edge (the arrangement is rigid once every corner meets)
+      fitted.forEach((q) => {
+        const s = p.solution.find((t) => t.id === q.id)!;
+        expect(Math.hypot(q.x - s.x, q.y - s.y), `${p.name} ${q.id}`).toBeLessThan(1e-4);
+      });
+      expect(coverage(fitted, outline, false)).toBeGreaterThan(0.999);
+      expect(hasOverlap(fitted)).toBe(false);
+    });
+  }
+
+  it("a genuinely different solution (the Square built turned 90°) locks exactly", () => {
+    const square = puzzles.find((q) => q.name === "Square")!;
+    const outline = square.polygons as Poly[];
+    // the stored solution turned 90° about the square's centre: every piece in a new place
+    const turned = square.solution.map((s) => ({ ...s, x: -s.y, y: s.x, rot: (s.rot + 90) % 360 }));
+    expect(coverage(turned, outline, false)).toBeGreaterThan(0.999); // it is a valid solution...
+    expect(perfectFit(turned, square.solution)).toBeNull(); // ...but not the stored one
+    const loose = turned.map((t, i) => ({ ...t, x: t.x + (i % 2 ? 0.09 : -0.08), y: t.y + (i % 3 ? 0.07 : -0.1) }));
+    const fitted = fitToOutline(loose, outline);
+    fitted.forEach((q, i) => expect(Math.hypot(q.x - turned[i].x, q.y - turned[i].y)).toBeLessThan(1e-4));
+    expect(coverage(fitted, outline, false)).toBeGreaterThan(0.999);
+    expect(hasOverlap(fitted)).toBe(false);
+  });
+
+  it("leaves pieces alone when they don't form the figure", () => {
+    const swan = puzzles.find((q) => q.name === "Swan")!;
+    const wrong = squareLayout([0, 0]);
+    expect(fitToOutline(wrong, swan.polygons as Poly[])).toEqual(wrong);
   });
 });

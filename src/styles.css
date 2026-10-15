@@ -234,7 +234,8 @@ button.primary:hover:not(:disabled) {
   stroke-width: 0.025;
   stroke-linejoin: round;
   cursor: grab;
-  filter: drop-shadow(0 0.06px 0.1px rgb(10 0 40 / 0.45));
+  /* no shadow at rest: a piece's shadow falls on its neighbour along a shared edge and makes
+     two pieces that meet edge to edge look like one overlaps the other */
   transition:
     transform 0.18s cubic-bezier(0.3, 1.3, 0.5, 1),
     filter 0.15s;
@@ -270,10 +271,10 @@ button.primary:hover:not(:disabled) {
 
 /* joined pieces: a soft glowing seam you can grab to move the whole group */
 .joint {
-  stroke: rgb(255 255 255 / 0.75);
-  stroke-width: 0.035;
+  /* a fine seam: marks the join without looking like a gap or a layered edge */
+  stroke: rgb(255 255 255 / 0.55);
+  stroke-width: 0.018;
   stroke-linecap: round;
-  filter: drop-shadow(0 0 0.06px rgb(255 255 255 / 0.9));
   pointer-events: none;
 }
 
@@ -305,7 +306,10 @@ button.primary:hover:not(:disabled) {
 }
 
 .piece.locked {
-  filter: drop-shadow(0 0 0.12px rgb(255 214 120 / 0.75));
+  /* locked in: a touch brighter with a thin golden edge (a glow would spill onto neighbours) */
+  filter: brightness(1.06) saturate(1.08);
+  stroke: rgb(255 214 120 / 0.7);
+  stroke-width: 0.014;
 }
 
 .piece.selected {
@@ -340,6 +344,10 @@ button.primary:hover:not(:disabled) {
   stroke-width: 0.02;
   /* a finished figure may glide across the board onto the outline: let it travel smoothly */
   transition: transform 0.55s cubic-bezier(0.25, 1, 0.35, 1);
+}
+
+/* the solved glow wraps the whole figure: per piece it would haze every inner seam */
+.pieces.solved-figure {
   animation: glow 1.6s ease-in-out infinite alternate;
 }
 
