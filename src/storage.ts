@@ -1,5 +1,8 @@
 import type { PieceState } from "./geometry/pieces";
 import type { Layout } from "./game/layout";
+// the progress model lives in shared/ so the Worker can merge and validate it too
+import type { Progress } from "../shared/progress";
+export type { Progress, SolveRecord } from "../shared/progress";
 
 export interface Design {
   name: string;
@@ -32,20 +35,6 @@ export const saveDesigns = (d: Design[]) => localStorage.setItem(DESIGNS, JSON.s
 // ---- progress (v2): what badges and stats are computed from ----
 
 const PROGRESS = "tangram.progress";
-
-export interface SolveRecord {
-  /** best time in ms */
-  best: number;
-  /** local date of the first solve, YYYY-MM-DD */
-  first: string;
-}
-
-export interface Progress {
-  v: 2;
-  solved: Record<string, SolveRecord>;
-  designsSaved: number;
-  exports: number;
-}
 
 /** Today's local date as YYYY-MM-DD. */
 export const today = (d = new Date()) =>
@@ -85,3 +74,12 @@ export const bump = (p: Progress, key: "designsSaved" | "exports"): Progress => 
 
 /** puzzle id → best time in ms (what the picker shows). */
 export const bestTimes = (p: Progress) => Object.fromEntries(Object.entries(p.solved).map(([id, r]) => [id, r.best]));
+
+// ---- deleted designs: remembered so sync doesn't bring them back from another device ----
+
+const DELETED = "tangram.designs.deleted";
+
+/** design name → when it was deleted */
+export const loadDeleted = () => read<Record<string, number>>(DELETED, {});
+export const saveDeleted = (d: Record<string, number>) => localStorage.setItem(DELETED, JSON.stringify(d));
+export const markDeleted = (name: string, at = Date.now()) => saveDeleted({ ...loadDeleted(), [name]: at });
