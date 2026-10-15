@@ -1192,6 +1192,33 @@ kbd {
     display: none;
   }
 
+  /* the tutorial's coach card gets its own row above the board, beside the toolbar rail */
+  .app.playing main:has(.coach) {
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .app.playing .coach {
+    grid-column: 1;
+    grid-row: 2;
+    width: auto;
+    margin: 0;
+    padding: 6px 12px;
+    gap: 4px;
+    font-size: 0.82rem;
+  }
+
+  .app.playing .coach-text {
+    min-height: 0;
+  }
+
+  .app.playing main:has(.coach) .stage {
+    grid-row: 3;
+  }
+
+  .app.playing main:has(.coach) .toolbar {
+    grid-row: 2 / 4;
+  }
+
   .app.playing .designs {
     grid-column: 2;
     grid-row: 3;

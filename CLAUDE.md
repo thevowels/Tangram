@@ -251,7 +251,10 @@ Any arrangement whose shape matches the silhouette wins.
 - **Who gets it:** first visit, after the nickname prompt, unless the player arrives with a `#sync=` code, picks "Played before? Use your sync code" in the prompt, or already has solves. `tangram.tutorial` marks it done (finished or skipped). "How to play" in the picker replays it.
 - **The lesson:** the Square (`tutorialPuzzle`) turned a quarter so both open spots face the tray. Five pieces start in place (`PLACED`); the medium triangle starts turned and the parallelogram mirrored (`tutorialStart`), so finishing needs a drag, a turn and a flip.
   - In the usual orientation the parallelogram's spot opens downward, and once the triangle is in, a straight drag from the tray gets stuck against it. Tests check both spots are reachable by straight drags in either order on five screen sizes.
-- **Steps** (`STEPS`): goal ("Got it"), drag, turn, flip, finish. `stepDone` compares the pieces with how the lesson started, so steps done early are skipped. The current target pieces pulse (`hint` prop on `Board`, `.piece.hint`: a stroke inside the piece, nothing spills).
+- **Steps** (`STEPS`): goal ("Got it"), drag, turn, flip, finish. `stepDone` compares the pieces with how the lesson started, so steps done early are skipped.
+  - Steps are checked only after the player's own moves (the `moves` counter bumped in `check`, i.e. `onSettle`), never on a mere re-render.
+  - The board resizes when the coach card's text changes height between steps (and on rotation), and `remap()` shifts every piece. The lesson's start is shifted the same way (`lessonStart` keeps its layout), so a resize never counts as a drag. Without this, step 2 skipped itself on phones.
+  - On short landscape screens the coach gets its own grid row above the board, beside the toolbar rail (`main:has(.coach)`). The current target pieces pulse (`hint` prop on `Board`, `.piece.hint`: a stroke inside the piece, nothing spills).
 - The coach card sits above the stage (in the flow, not over the board). Leaving by ←, the mode switch or "Skip tutorial" ends it. The finish card explains joints and offers "Start playing" or "Free play".
 - The finished lesson doesn't count as solving the Square (no `onSolved`), and Export is hidden. Analytics log `tutorial_start`, `tutorial_done` and `tutorial_skip` instead of puzzle events.
 
