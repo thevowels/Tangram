@@ -6,6 +6,8 @@ interface Props {
   puzzles: Puzzle[];
   solved: Record<string, number>;
   onPick(p: Puzzle): void;
+  /** replay the first-run lesson */
+  onHowTo(): void;
 }
 
 export const formatTime = (ms: number) => {
@@ -54,7 +56,7 @@ function Thumb({ loops }: { loops: Poly[] }) {
   );
 }
 
-export function PuzzlePicker({ puzzles, solved, onPick }: Props) {
+export function PuzzlePicker({ puzzles, solved, onPick, onHowTo }: Props) {
   const done = puzzles.filter((p) => p.id in solved).length;
   const stats = useGlobalStats();
   return (
@@ -62,7 +64,12 @@ export function PuzzlePicker({ puzzles, solved, onPick }: Props) {
       <div className="picker-hero">
         <div>
           <h2>Pick a shape</h2>
-          <p>Use all seven pieces to fill the silhouette.</p>
+          <p>
+            Use all seven pieces to fill the silhouette.{" "}
+            <button className="link how-to" onClick={onHowTo}>
+              How to play
+            </button>
+          </p>
         </div>
         <div className="progress" aria-label={`${done} of ${puzzles.length} solved`}>
           <span className="progress-count">

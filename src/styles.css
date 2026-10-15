@@ -312,6 +312,19 @@ button.primary:hover:not(:disabled) {
   stroke-width: 0.014;
 }
 
+/* the tutorial's target piece: a pulsing white edge (inside the piece, so nothing spills) */
+.piece.hint:not(.selected):not(.lifted) {
+  stroke: #fff;
+  stroke-width: 0.05;
+  animation: hint-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes hint-pulse {
+  50% {
+    stroke-opacity: 0.15;
+  }
+}
+
 .piece.selected {
   stroke: #fff;
   stroke-width: 0.06;
@@ -1154,6 +1167,104 @@ kbd {
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+}
+
+/* ---- tutorial ---- */
+
+.coach {
+  display: grid;
+  gap: 8px;
+  width: min(560px, calc(100% - 16px));
+  margin: 0 auto 6px;
+  padding: 10px 14px;
+  border-radius: 18px;
+  background: rgb(26 18 64 / 0.85);
+  border: 1px solid rgb(255 209 102 / 0.45);
+  box-shadow: 0 10px 30px rgb(0 0 0 / 0.3);
+  font-size: 0.9rem;
+  line-height: 1.35;
+}
+
+.coach-text {
+  display: grid;
+  gap: 2px;
+  /* room for the longest step, so the board doesn't jump as steps change */
+  min-height: 3.6em;
+}
+
+.coach-text strong {
+  font-size: 1rem;
+}
+
+.coach-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.4em;
+  height: 1.4em;
+  margin-right: 4px;
+  border-radius: 50%;
+  background: var(--hot);
+  color: #fff;
+  font-size: 0.8em;
+}
+
+.coach-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.coach-dots {
+  display: flex;
+  gap: 5px;
+  flex: 1;
+}
+
+.coach-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--glass-line);
+}
+
+.coach-dots .done {
+  background: #ffd166;
+}
+
+.coach-dots .now {
+  background: #fff;
+}
+
+.coach-foot button.primary {
+  min-height: 36px;
+}
+
+/* a text-only button that reads as a link */
+button.link {
+  min-height: 0;
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  backdrop-filter: none;
+  color: var(--muted);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+button.link:hover:not(:disabled) {
+  background: none;
+  color: #fff;
+}
+
+.how-to {
+  font-size: inherit;
+}
+
+.success-card .muted {
+  color: var(--muted);
+  max-width: 34ch;
+  margin-inline: auto;
 }
 
 /* ---- nickname ---- */

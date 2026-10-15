@@ -152,7 +152,17 @@ export function validatePayload(x: unknown): SyncPayload | null {
 
 // ---- gameplay analytics: anonymous daily counters ----
 
-export const EVENTS = ["start", "solve", "quit", "export", "design_save", "free_open"] as const;
+export const EVENTS = [
+  "start",
+  "solve",
+  "quit",
+  "export",
+  "design_save",
+  "free_open",
+  "tutorial_start",
+  "tutorial_done",
+  "tutorial_skip",
+] as const;
 export type EventName = (typeof EVENTS)[number];
 
 export interface GameEvent {

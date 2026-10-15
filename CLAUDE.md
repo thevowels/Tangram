@@ -236,6 +236,14 @@ Any arrangement whose shape matches the silhouette wins.
 - **Stored** as `tangram.nickname` = `{ name, at }` and synced in the progress payload (`players.nickname`, `nickname_at`). The latest `at` wins. A typed name gets `Date.now()`, an untouched suggestion gets `at: 0`, so a random name on a new device never overwrites a chosen one; ties go to the smaller name so both sides agree.
 - **Where it shows:** export captions ("Solved by Aung in 0:42", "Made by Aung in free play"). It is never shown to other players.
 
+**First-run tutorial** (`game/tutorial.ts`, `components/Coach.tsx`, the `tutorial` prop of `PuzzlePlay`):
+- **Who gets it:** first visit, after the nickname prompt, unless the player arrives with a `#sync=` code, picks "Played before? Use your sync code" in the prompt, or already has solves. `tangram.tutorial` marks it done (finished or skipped). "How to play" in the picker replays it.
+- **The lesson:** the Square (`tutorialPuzzle`) turned a quarter so both open spots face the tray. Five pieces start in place (`PLACED`); the medium triangle starts turned and the parallelogram mirrored (`tutorialStart`), so finishing needs a drag, a turn and a flip.
+  - In the usual orientation the parallelogram's spot opens downward, and once the triangle is in, a straight drag from the tray gets stuck against it. Tests check both spots are reachable by straight drags in either order on five screen sizes.
+- **Steps** (`STEPS`): goal ("Got it"), drag, turn, flip, finish. `stepDone` compares the pieces with how the lesson started, so steps done early are skipped. The current target pieces pulse (`hint` prop on `Board`, `.piece.hint`: a stroke inside the piece, nothing spills).
+- The coach card sits above the stage (in the flow, not over the board). Leaving by ←, the mode switch or "Skip tutorial" ends it. The finish card explains joints and offers "Start playing" or "Free play".
+- The finished lesson doesn't count as solving the Square (no `onSolved`), and Export is hidden. Analytics log `tutorial_start`, `tutorial_done` and `tutorial_skip` instead of puzzle events.
+
 **Global stats** (`GET /api/stats`, `useGlobalStats` in `PuzzlePicker.tsx`):
 - Per puzzle: synced solvers and the average best time (each time capped at `AVG_CAP_MS`, 10 min, so a forgotten tab doesn't skew it). Cards show "12 solved · avg 1:35".
 - Only puzzles with ≥ `MIN_SOLVERS` (5) are returned, so no single player's time can be read off a card.
