@@ -224,9 +224,16 @@ button.primary:hover:not(:disabled) {
   stroke-linejoin: round;
 }
 
+/* once solved the shadow fades away, leaving only the finished figure */
+.guide {
+  transition:
+    fill-opacity 0.6s ease,
+    stroke-opacity 0.6s ease;
+}
+
 .guide.solved {
-  fill: none;
-  stroke: none;
+  fill-opacity: 0;
+  stroke-opacity: 0;
 }
 
 .piece {
@@ -361,15 +368,15 @@ button.primary:hover:not(:disabled) {
 
 /* the solved glow wraps the whole figure: per piece it would haze every inner seam */
 .pieces.solved-figure {
-  animation: glow 1.6s ease-in-out infinite alternate;
+  animation: glow 2.6s ease-in-out infinite alternate;
 }
 
 @keyframes glow {
   from {
-    filter: drop-shadow(0 0 0.05px rgb(255 214 120 / 0.25));
+    filter: drop-shadow(0 0 0.06px rgb(255 214 120 / 0.2));
   }
   to {
-    filter: drop-shadow(0 0 0.25px rgb(255 214 120 / 0.8));
+    filter: drop-shadow(0 0 0.22px rgb(255 214 120 / 0.6));
   }
 }
 
@@ -520,75 +527,80 @@ button.primary:hover:not(:disabled) {
   flex: none;
 }
 
-/* ---- success ---- */
+/* ---- finish: a quiet caption under the figure (never over it) ---- */
 
-.success {
+.finish {
+  /* placed by PuzzlePlay in the free space beside or below the figure; bottom strip until measured */
   position: absolute;
-  inset: 0;
+  left: 8px;
+  right: 8px;
+  bottom: 10px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 10px;
+  text-align: center;
+  pointer-events: none;
+  animation: finish-in 0.7s ease-out 0.5s backwards;
+}
+
+.finish > * {
+  pointer-events: auto;
+}
+
+@keyframes finish-in {
+  from {
+    opacity: 0;
+    translate: 0 12px;
+  }
+}
+
+.finish p {
+  margin: 0;
+}
+
+.finish-line {
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-shadow: 0 2px 12px rgb(0 0 0 / 0.5);
 }
 
-.success-card {
-  pointer-events: auto;
-  text-align: center;
-  padding: 22px 28px;
-  border-radius: 24px;
-  background: rgb(26 18 64 / 0.72);
-  border: 1px solid var(--glass-line);
-  backdrop-filter: blur(14px);
-  box-shadow: 0 20px 60px rgb(0 0 0 / 0.4);
-  animation: pop-in 0.4s cubic-bezier(0.3, 1.6, 0.5, 1) 0.25s backwards;
+.finish-line strong {
+  font-size: 1.3rem;
+  font-variant-numeric: tabular-nums;
 }
 
-.success-card h3 {
-  margin: 0;
-  font-size: 2.4rem;
-  font-weight: 900;
-  background: var(--hot);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-
-.success-card p {
-  margin: 6px 0 16px;
+.finish-dot {
   color: var(--muted);
 }
 
-.success-card p strong {
-  color: #fff;
+.finish-best {
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: #1a1240;
+  background: #ffd166;
 }
 
-.success-card div {
+.finish-note {
+  max-width: 40ch;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.finish-actions {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
-}
-
-.confetti {
-  position: absolute;
-  inset: 0;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-.confetti span {
-  position: absolute;
-  top: -24px;
-  animation-name: fall;
-  animation-timing-function: cubic-bezier(0.25, 0.4, 0.5, 1);
-  animation-fill-mode: forwards;
-}
-
-@keyframes fall {
-  to {
-    transform: translate(var(--drift), 110vh) rotate(var(--spin));
-    opacity: 0.2;
-  }
 }
 
 /* ---- puzzle picker ---- */
@@ -707,6 +719,15 @@ button.primary:hover:not(:disabled) {
   .card:hover svg {
     transform: scale(1.08) rotate(-4deg);
   }
+
+  .card:hover .card-medal svg {
+    transform: none;
+  }
+
+  .card:hover .card-medal::after {
+    transform: translateX(120%);
+    transition: transform 0.6s ease;
+  }
 }
 
 .card-name {
@@ -715,13 +736,43 @@ button.primary:hover:not(:disabled) {
   font-weight: 700;
 }
 
-.card-badge {
+.card-medal {
   position: absolute;
-  top: 8px;
-  right: 10px;
-  font-size: 0.7rem;
+  top: 7px;
+  right: 7px;
+  display: grid;
+  overflow: hidden;
+  border-radius: 50%;
+  filter: drop-shadow(0 2px 4px rgb(0 0 0 / 0.4));
+}
+
+/* a glint that sweeps across the medal on hover */
+.card-medal::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(115deg, transparent 35%, rgb(255 255 255 / 0.75) 50%, transparent 65%);
+  transform: translateX(-120%);
+}
+
+.card-time {
+  position: relative;
+  margin-top: -6px;
+  font-size: 0.78rem;
   font-weight: 800;
-  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.card-time.gold {
+  color: #ffd166;
+}
+
+.card-time.silver {
+  color: #d8dee9;
+}
+
+.card-time.bronze {
+  color: #e8a06a;
 }
 
 .card-stats {
@@ -1259,12 +1310,6 @@ button.link:hover:not(:disabled) {
 
 .how-to {
   font-size: inherit;
-}
-
-.success-card .muted {
-  color: var(--muted);
-  max-width: 34ch;
-  margin-inline: auto;
 }
 
 /* ---- nickname ---- */

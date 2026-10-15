@@ -8,6 +8,7 @@ import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
 import { computeBadges, newlyEarned } from "./game/badges";
+import { medal, par } from "./game/medals";
 import { bump, migrateProgress, recordSolve, type Progress } from "./storage";
 
 const puzzles = puzzlesJson as unknown as Puzzle[];
@@ -597,5 +598,30 @@ describe("progress and badges", () => {
     const before = recordSolve(empty, "p01", 90_000);
     const after = recordSolve(before, "p02", 20_000);
     expect(newlyEarned(before, after, puzzles).map((b) => b.id)).toEqual(["quick"]);
+  });
+});
+
+describe("speed medals", () => {
+  const all = puzzlesJson as unknown as Puzzle[];
+  const byId = (id: string) => all.find((p) => p.id === id)!;
+
+  it("par grows with the outline's corners, with overrides for tricky shapes", () => {
+    const trapezoid = byId("p05"); // 5 corners
+    expect(par(trapezoid)).toBe(30_000 + 6_000 * 5);
+    expect(par(byId("p01"))).toBe(120_000); // the Square is harder than it looks
+    for (const p of all) {
+      expect(par(p), p.name).toBeGreaterThanOrEqual(45_000);
+      expect(par(p), p.name).toBeLessThanOrEqual(240_000);
+    }
+  });
+
+  it("gold at par, silver within twice par, bronze beyond", () => {
+    const p = byId("p05");
+    const t = par(p);
+    expect(medal(t, p)).toBe("gold");
+    expect(medal(t + 1, p)).toBe("silver");
+    expect(medal(2 * t, p)).toBe("silver");
+    expect(medal(2 * t + 1, p)).toBe("bronze");
+    expect(medal(3_600_000, p)).toBe("bronze");
   });
 });

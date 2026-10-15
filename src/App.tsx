@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type RefObject } from "react";
 import { Board } from "./components/Board";
-import { Confetti } from "./components/Confetti";
+import { Medal } from "./components/Medal";
+import { medal, MEDAL_NAME } from "./game/medals";
 import { Logo } from "./components/Logo";
 import { formatTime, PuzzlePicker } from "./components/PuzzlePicker";
 import { Toolbar } from "./components/Toolbar";
@@ -301,6 +302,7 @@ function PuzzlePlay({
   nickname,
   tutorial,
   touch,
+  best,
   onSolved,
   onTrack,
   onNext,
@@ -311,6 +313,8 @@ function PuzzlePlay({
   /** Play this as the first-run lesson (the puzzle is the Square, mostly filled in). */
   tutorial?: { onFinish(goFree: boolean): void; onSkip(): void };
   touch: boolean;
+  /** Best time before this attempt, to tell a new best. */
+  best?: number;
   onSolved(ms: number): void;
   onTrack(kind: "exports"): void;
   onNext(): void;
@@ -325,6 +329,8 @@ function PuzzlePlay({
     [puzzle, layout],
   );
   const start = useRef(performance.now());
+  // the best before this attempt: App's copy updates the moment this solve is saved
+  const previousBest = useRef(best);
   const [solvedIn, setSolvedIn] = useState<number | null>(null);
   const [match, setMatch] = useState(0);
   const [now, setNow] = useState(0);
@@ -431,6 +437,24 @@ function PuzzlePlay({
   replacePieces.current = g.replace;
   const pct = Math.round(match * 100);
 
+  // the finish caption goes in the space the tray leaves free: beside the figure in landscape,
+  // below it in portrait (measured from the drawn shadow, which is where the figure ends up)
+  const [finishBox, setFinishBox] = useState<React.CSSProperties | undefined>();
+  useLayoutEffect(() => {
+    const stage = stageRef.current;
+    const shadow = svgRef.current?.querySelector(".guide");
+    if (solvedIn === null || !stage || !shadow || !layout) return;
+    const s = stage.getBoundingClientRect();
+    const f = shadow.getBoundingClientRect();
+    const pad = 12;
+    if (layout.orientation === "landscape") {
+      const left = f.right - s.left + pad;
+      setFinishBox({ left, right: pad, top: 0, bottom: 0 });
+    } else {
+      setFinishBox({ left: pad, right: pad, top: f.bottom - s.top + pad, bottom: 0 });
+    }
+  }, [solvedIn, layout]);
+
   /** Save the figure (and the pieces around it) as an image, captioned with the puzzle. */
   const exportPng = () => {
     if (!svgRef.current || !layout || !guide || !g.pieces) return;
@@ -486,41 +510,42 @@ function PuzzlePlay({
         )}
         {!lesson && <JointTip />}
         {tutorial && solvedIn !== null && (
-          <div className="success">
-            <Confetti />
-            <div className="success-card">
-              <h3>You're ready! 🎉</h3>
-              <p>That's every move you need. One more trick:</p>
-              <p className="muted">
-                Pieces that share an edge stick together. <strong>Drag the thin line between them</strong> to move
-                them as one, or drag a single piece to pull it out.
-              </p>
-              <div>
-                <button className="primary" onClick={() => tutorial.onFinish(false)}>
-                  Start playing →
-                </button>
-                <button onClick={() => tutorial.onFinish(true)}>Free play</button>
-              </div>
+          <div className="finish" role="status" style={finishBox}>
+            <p className="finish-line">
+              <strong>You're ready!</strong>
+            </p>
+            <p className="finish-note">
+              Pieces that share an edge stick together: drag the thin line between them to move them as one.
+            </p>
+            <div className="finish-actions">
+              <button className="primary" onClick={() => tutorial.onFinish(false)}>
+                Start playing →
+              </button>
+              <button onClick={() => tutorial.onFinish(true)}>Free play</button>
             </div>
           </div>
         )}
         {!lesson && solvedIn !== null && (
-          <div className="success">
-            <Confetti />
-            <div className="success-card">
-              <h3>Solved!</h3>
-              <p>
-                {puzzle.name} in <strong>{formatTime(solvedIn)}</strong>
-              </p>
-              <div>
-                <button className="primary" onClick={onNext}>
-                  Next puzzle →
-                </button>
-                <button onClick={exportPng}>
-                  <span aria-hidden>⤓</span> Save image
-                </button>
-                <button onClick={onBack}>All puzzles</button>
-              </div>
+          <div className="finish" role="status" style={finishBox}>
+            <p className="finish-line">
+              <Medal tier={medal(solvedIn, puzzle)} size={30} label={`${MEDAL_NAME[medal(solvedIn, puzzle)]} medal`} />
+              <span>{puzzle.name}</span>
+              <span className="finish-dot" aria-hidden>
+                ·
+              </span>
+              <strong>{formatTime(solvedIn)}</strong>
+              {previousBest.current !== undefined && Math.round(solvedIn) < previousBest.current && (
+                <span className="finish-best">new best</span>
+              )}
+            </p>
+            <div className="finish-actions">
+              <button className="primary" onClick={onNext}>
+                Next puzzle →
+              </button>
+              <button onClick={exportPng}>
+                <span aria-hidden>⤓</span> Save image
+              </button>
+              <button onClick={onBack}>All puzzles</button>
             </div>
           </div>
         )}
@@ -694,6 +719,7 @@ export default function App() {
               puzzle={puzzle}
               nickname={nickname}
               touch={touch}
+              best={solved[puzzle.id]}
               onSolved={onSolved}
               onTrack={track}
               onNext={next}
