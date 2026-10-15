@@ -40,10 +40,24 @@ import { computeBadges, newlyEarned, type Badge } from "./game/badges";
 import { BadgesSheet, BadgeToast } from "./components/Badges";
 import { NicknamePrompt } from "./components/Nickname";
 import { logEvent } from "./analytics";
+import { Coach } from "./components/Coach";
+import {
+  currentStep,
+  HINT,
+  markTutorialDone,
+  stepDone,
+  STEPS,
+  TUTORIAL_PUZZLE,
+  tutorialDone,
+  tutorialPuzzle,
+  tutorialStart,
+  type Step,
+} from "./game/tutorial";
 import { codeFromUrl, scheduleSync, SYNC_EVENT, syncNow } from "./sync";
 import puzzlesJson from "./data/puzzles.json";
 
 const PUZZLES = puzzlesJson as unknown as Puzzle[];
+const TUTORIAL = tutorialPuzzle(PUZZLES.find((p) => p.id === TUTORIAL_PUZZLE)!);
 
 type Mode = "free" | "puzzles";
 
@@ -285,6 +299,8 @@ function FreePlay({
 function PuzzlePlay({
   puzzle,
   nickname,
+  tutorial,
+  touch,
   onSolved,
   onTrack,
   onNext,
@@ -292,6 +308,9 @@ function PuzzlePlay({
 }: {
   puzzle: Puzzle;
   nickname: string | null;
+  /** Play this as the first-run lesson (the puzzle is the Square, mostly filled in). */
+  tutorial?: { onFinish(goFree: boolean): void; onSkip(): void };
+  touch: boolean;
   onSolved(ms: number): void;
   onTrack(kind: "exports"): void;
   onNext(): void;
@@ -310,6 +329,7 @@ function PuzzlePlay({
   const [match, setMatch] = useState(0);
   const [now, setNow] = useState(0);
 
+  const lesson = !!tutorial;
   // analytics: a start, then either a solve or a quit (leaving, or closing the page, unsolved)
   const session = useRef({ started: false, ended: false, mounted: false, best: 0 });
   useEffect(() => {
@@ -317,12 +337,13 @@ function PuzzlePlay({
     s.mounted = true;
     if (!s.started) {
       s.started = true;
-      logEvent({ e: "start", p: puzzle.id });
+      logEvent(lesson ? { e: "tutorial_start" } : { e: "start", p: puzzle.id });
     }
     const quit = () => {
       if (s.ended) return;
       s.ended = true;
-      logEvent({ e: "quit", p: puzzle.id, ms: performance.now() - start.current, pct: s.best * 100 });
+      const ms = performance.now() - start.current;
+      logEvent(lesson ? { e: "tutorial_skip", ms } : { e: "quit", p: puzzle.id, ms, pct: s.best * 100 });
     };
     window.addEventListener("pagehide", quit);
     return () => {
@@ -331,7 +352,7 @@ function PuzzlePlay({
       // StrictMode remounts at once in development; only a real unmount counts as leaving
       setTimeout(() => !s.mounted && quit(), 0);
     };
-  }, [puzzle.id]);
+  }, [puzzle.id, lesson]);
 
   useEffect(() => {
     if (solvedIn !== null) return;
@@ -366,15 +387,16 @@ function PuzzlePlay({
         if (locked) setMatch(1); // locked exactly to the outline: a true 100%
         const ms = performance.now() - start.current;
         setSolvedIn(ms);
-        onSolved(ms);
+        // the lesson's mostly-built square doesn't count as solving the real Square
+        if (!lesson) onSolved(ms);
         if (!session.current.ended) {
           session.current.ended = true;
-          logEvent({ e: "solve", p: puzzle.id, ms });
+          logEvent(lesson ? { e: "tutorial_done", ms } : { e: "solve", p: puzzle.id, ms });
         }
         navigator.vibrate?.([30, 60, 30]);
       }
     },
-    [guide, onSolved, puzzle, layout],
+    [guide, onSolved, puzzle, layout, lesson],
   );
 
   const slots = useMemo(
@@ -382,7 +404,30 @@ function PuzzlePlay({
       layout ? puzzle.solution.map((s) => ({ ...s, x: s.x + layout.target[0], y: s.y + layout.target[1] })) : undefined,
     [puzzle, layout],
   );
-  const g = usePieces(layout, trayLayout, check, true, guide ?? undefined, slots);
+  const initial = useCallback(
+    (l: Layout) => (lesson ? tutorialStart(l, puzzle.solution) : trayLayout(l)),
+    [lesson, puzzle],
+  );
+  const g = usePieces(layout, initial, check, true, guide ?? undefined, slots);
+
+  // the lesson: steps pass as the player does them (in any order), compared with the start
+  const lessonStart = useRef<PieceState[] | null>(null);
+  useEffect(() => {
+    if (!lesson || !g.pieces || lessonStart.current || !guide) return;
+    lessonStart.current = g.pieces;
+    setMatch(evaluate(g.pieces, guide).match); // five pieces start in place: show it
+  }, [lesson, g.pieces, guide]);
+  const [passed, setPassed] = useState<Set<Step>>(new Set());
+  useEffect(() => {
+    if (!lesson || !g.pieces || !lessonStart.current) return;
+    const from = lessonStart.current;
+    const now = g.pieces;
+    setPassed((p) => {
+      const add = STEPS.filter((s) => !p.has(s) && stepDone(s, from, now, solvedIn !== null));
+      return add.length ? new Set([...p, ...add]) : p;
+    });
+  }, [lesson, g.pieces, solvedIn]);
+  const step = currentStep(passed);
   replacePieces.current = g.replace;
   const pct = Math.round(match * 100);
 
@@ -412,8 +457,8 @@ function PuzzlePlay({
         <button className="icon-btn" onClick={onBack} aria-label="All puzzles">
           ←
         </button>
-        <h2>{puzzle.name}</h2>
-        <span className="pill">⏱ {formatTime(solvedIn ?? now)}</span>
+        <h2>{lesson ? "How to play" : puzzle.name}</h2>
+        {!lesson && <span className="pill">⏱ {formatTime(solvedIn ?? now)}</span>}
         <span className="pill match" title="How much of the silhouette your pieces cover">
           <span className="meter">
             <span style={{ width: `${pct}%` }} />
@@ -421,10 +466,45 @@ function PuzzlePlay({
           {pct}%
         </span>
       </div>
+      {tutorial && solvedIn === null && (
+        <Coach
+          step={step}
+          touch={touch}
+          onNext={() => setPassed((p) => new Set([...p, "goal"]))}
+          onSkip={tutorial.onSkip}
+        />
+      )}
       <div className="stage" ref={stageRef}>
-        {g.boardProps && guide && <Board ref={svgRef} {...g.boardProps} guide={guide} solved={solvedIn !== null} />}
-        <JointTip />
-        {solvedIn !== null && (
+        {g.boardProps && guide && (
+          <Board
+            ref={svgRef}
+            {...g.boardProps}
+            guide={guide}
+            solved={solvedIn !== null}
+            hint={lesson ? HINT[step] : undefined}
+          />
+        )}
+        {!lesson && <JointTip />}
+        {tutorial && solvedIn !== null && (
+          <div className="success">
+            <Confetti />
+            <div className="success-card">
+              <h3>You're ready! 🎉</h3>
+              <p>That's every move you need. One more trick:</p>
+              <p className="muted">
+                Pieces that share an edge stick together. <strong>Drag the thin line between them</strong> to move
+                them as one, or drag a single piece to pull it out.
+              </p>
+              <div>
+                <button className="primary" onClick={() => tutorial.onFinish(false)}>
+                  Start playing →
+                </button>
+                <button onClick={() => tutorial.onFinish(true)}>Free play</button>
+              </div>
+            </div>
+          </div>
+        )}
+        {!lesson && solvedIn !== null && (
           <div className="success">
             <Confetti />
             <div className="success-card">
@@ -450,13 +530,15 @@ function PuzzlePlay({
         onRotate={(d) => g.doRotate(g.selected, d)}
         onFlip={() => g.doFlip(g.selected)}
         onReset={() => {
-          if (layout) g.reset(trayLayout(layout));
+          if (layout) g.reset(initial(layout));
           setMatch(0);
         }}
       >
-        <button onClick={exportPng}>
-          <span aria-hidden>⤓</span> Export
-        </button>
+        {!lesson && (
+          <button onClick={exportPng}>
+            <span aria-hidden>⤓</span> Export
+          </button>
+        )}
       </Toolbar>
     </>
   );
@@ -486,6 +568,20 @@ export default function App() {
   const [nickname, setNickname] = useState(() => loadNickname()?.name ?? null);
   // first visit: ask for a name (not when arriving with a sync code, which brings its own)
   const [askName, setAskName] = useState(() => nickname === null && incomingCode === null);
+  // first visit: after the name, a short lesson (unless they bring a sync code or have played before)
+  const [lesson, setLesson] = useState(
+    () => !tutorialDone() && incomingCode === null && Object.keys(loadProgress().solved).length === 0,
+  );
+  const [enterCode, setEnterCode] = useState(false);
+  const endLesson = useCallback((next: Mode) => {
+    markTutorialDone();
+    setLesson(false);
+    setMode(next);
+  }, []);
+  const lessonHandlers = useMemo(
+    () => ({ onFinish: (goFree: boolean) => endLesson(goFree ? "free" : "puzzles"), onSkip: () => endLesson("puzzles") }),
+    [endLesson],
+  );
 
   /** A name the player typed beats names on other devices; an untouched suggestion never does. */
   const changeNickname = useCallback((name: string, typed: boolean) => {
@@ -549,7 +645,11 @@ export default function App() {
     setPuzzle(PUZZLES[(i + 1) % PUZZLES.length]);
   };
 
-  const playing = mode === "free" || puzzle !== null;
+  const playing = lesson || mode === "free" || puzzle !== null;
+  const switchMode = (m: Mode) => {
+    if (lesson) endLesson(m);
+    else setMode(m);
+  };
 
   return (
     <div className={"app" + (playing ? " playing" : "")}>
@@ -563,41 +663,71 @@ export default function App() {
           <small>/{badges.length}</small>
         </button>
         <nav>
-          <button className={mode === "puzzles" ? "active" : ""} onClick={() => setMode("puzzles")}>
+          <button className={mode === "puzzles" ? "active" : ""} onClick={() => switchMode("puzzles")}>
             Puzzles
           </button>
-          <button className={mode === "free" ? "active" : ""} onClick={() => setMode("free")}>
+          <button className={mode === "free" ? "active" : ""} onClick={() => switchMode("free")}>
             Free play
           </button>
         </nav>
       </header>
       <main>
-        {mode === "free" && <FreePlay nickname={nickname} onTrack={track} />}
-        {mode === "puzzles" &&
+        {lesson && (
+          <PuzzlePlay
+            key="tutorial"
+            puzzle={TUTORIAL}
+            nickname={nickname}
+            tutorial={lessonHandlers}
+            touch={touch}
+            onSolved={onSolved}
+            onTrack={track}
+            onNext={lessonHandlers.onSkip}
+            onBack={lessonHandlers.onSkip}
+          />
+        )}
+        {!lesson && mode === "free" && <FreePlay nickname={nickname} onTrack={track} />}
+        {!lesson &&
+          mode === "puzzles" &&
           (puzzle ? (
             <PuzzlePlay
               key={puzzle.id}
               puzzle={puzzle}
               nickname={nickname}
+              touch={touch}
               onSolved={onSolved}
               onTrack={track}
               onNext={next}
               onBack={() => setPuzzle(null)}
             />
           ) : (
-            <PuzzlePicker puzzles={PUZZLES} solved={solved} onPick={setPuzzle} />
+            <PuzzlePicker puzzles={PUZZLES} solved={solved} onPick={setPuzzle} onHowTo={() => setLesson(true)} />
           ))}
       </main>
       {showBadges && (
         <BadgesSheet
           badges={badges}
           incomingCode={incomingCode}
+          enterCode={enterCode}
           nickname={nickname}
           onNickname={changeNickname}
-          onClose={() => setShowBadges(false)}
+          onClose={() => {
+            setShowBadges(false);
+            setEnterCode(false);
+          }}
         />
       )}
-      {askName && <NicknamePrompt onSave={changeNickname} />}
+      {askName && (
+        <NicknamePrompt
+          onSave={changeNickname}
+          onHaveCode={() => {
+            // played before: no name or lesson needed, the account brings them
+            setAskName(false);
+            setLesson(false);
+            setEnterCode(true);
+            setShowBadges(true);
+          }}
+        />
+      )}
       <BadgeToast badge={toasts[0]} onDone={dismissToast} />
       <footer>
         {touch ? (

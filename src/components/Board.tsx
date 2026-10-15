@@ -21,6 +21,8 @@ interface Props {
   /** The puzzle's exact spots (solution placed on the board): close, correctly turned pieces pull in. */
   slots?: PieceState[];
   solved?: boolean;
+  /** Pieces to point at (the tutorial's current target): they pulse. */
+  hint?: string[];
   onSelect(ids: string[]): void;
   /** Live updates while dragging. */
   onChange(pieces: PieceState[]): void;
@@ -144,7 +146,7 @@ function findJoints(pieces: PieceState[]): Joint[] {
 }
 
 export const Board = forwardRef<SVGSVGElement, Props>(function Board(
-  { board, pieces, selected, guide, slots, solved, onSelect, onChange, onSettle, onRotate, onFlip },
+  { board, pieces, selected, guide, slots, solved, hint, onSelect, onChange, onSettle, onRotate, onFlip },
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -526,7 +528,8 @@ export const Board = forwardRef<SVGSVGElement, Props>(function Board(
               (dragging.includes(p.id) ? " lifted" : "") +
               (hoverGroup.includes(p.id) ? " group-hover" : "") +
               (locked.has(p.id) && !solved ? " locked" : "") +
-              (solved ? " solved" : "")
+              (solved ? " solved" : "") +
+              (hint?.includes(p.id) && !solved ? " hint" : "")
             }
             d={toPath([def.shape])}
             style={{

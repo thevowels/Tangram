@@ -9,6 +9,7 @@ import { deleteOnline, displayCode, enableSync, loadSync, switchToCode, SYNC_EVE
 export function BadgesSheet({
   badges,
   incomingCode,
+  enterCode,
   nickname,
   onNickname,
   onClose,
@@ -18,6 +19,8 @@ export function BadgesSheet({
   onNickname(name: string, typed: boolean): void;
   /** a code from a scanned QR link, offered for use */
   incomingCode: string | null;
+  /** open with the "use a code from another device" field ready */
+  enterCode?: boolean;
   onClose(): void;
 }) {
   useEffect(() => {
@@ -67,14 +70,14 @@ export function BadgesSheet({
             </li>
           ))}
         </ul>
-        <SyncPanel incomingCode={incomingCode} />
+        <SyncPanel incomingCode={incomingCode} enterCode={enterCode} />
       </div>
     </div>
   );
 }
 
 /** Sync across devices: the code, its QR, using another device's code, and deleting online data. */
-function SyncPanel({ incomingCode }: { incomingCode: string | null }) {
+function SyncPanel({ incomingCode, enterCode }: { incomingCode: string | null; enterCode?: boolean }) {
   const [state, setState] = useState<SyncState>(loadSync);
   // a scanned code that this device already uses needs no action
   const offered = incomingCode && normalizeCode(incomingCode) !== state.code ? incomingCode : null;
@@ -83,7 +86,7 @@ function SyncPanel({ incomingCode }: { incomingCode: string | null }) {
     incomingCode && !offered ? "This device already uses that code." : null,
   );
   const [entry, setEntry] = useState(offered ?? "");
-  const [entering, setEntering] = useState(offered !== null);
+  const [entering, setEntering] = useState(offered !== null || !!enterCode);
   const [showQr, setShowQr] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -91,8 +94,8 @@ function SyncPanel({ incomingCode }: { incomingCode: string | null }) {
 
   // arriving from a scanned code: show this section, not the top of the badge list
   useEffect(() => {
-    if (incomingCode) ref.current?.scrollIntoView({ block: "end" });
-  }, [incomingCode]);
+    if (incomingCode || enterCode) ref.current?.scrollIntoView({ block: "end" });
+  }, [incomingCode, enterCode]);
 
   useEffect(() => {
     const reload = () => setState(loadSync());

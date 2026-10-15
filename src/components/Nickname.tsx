@@ -87,7 +87,14 @@ function NicknameForm({
 }
 
 /** Asked once, on a player's first visit. Closing it keeps the suggested name. */
-export function NicknamePrompt({ onSave }: { onSave(name: string, typed: boolean): void }) {
+export function NicknamePrompt({
+  onSave,
+  onHaveCode,
+}: {
+  onSave(name: string, typed: boolean): void;
+  /** Played before on another device: use its sync code instead. */
+  onHaveCode(): void;
+}) {
   // closing without choosing keeps a random name, so the prompt never comes back
   const fallback = useRef(randomNickname());
   useEffect(() => {
@@ -108,6 +115,9 @@ export function NicknamePrompt({ onSave }: { onSave(name: string, typed: boolean
         </p>
         <NicknameForm submitLabel="Let's play" onSave={onSave} autoFocus />
         <p className="muted small">You can change it any time under 🏅.</p>
+        <button className="link" onClick={onHaveCode}>
+          Played before? Use your sync code
+        </button>
       </div>
     </div>
   );
