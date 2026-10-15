@@ -39,6 +39,7 @@ import {
 import { computeBadges, newlyEarned, type Badge } from "./game/badges";
 import { BadgesSheet, BadgeToast } from "./components/Badges";
 import { NicknamePrompt } from "./components/Nickname";
+import { logEvent } from "./analytics";
 import { codeFromUrl, scheduleSync, SYNC_EVENT, syncNow } from "./sync";
 import puzzlesJson from "./data/puzzles.json";
 
@@ -309,6 +310,29 @@ function PuzzlePlay({
   const [match, setMatch] = useState(0);
   const [now, setNow] = useState(0);
 
+  // analytics: a start, then either a solve or a quit (leaving, or closing the page, unsolved)
+  const session = useRef({ started: false, ended: false, mounted: false, best: 0 });
+  useEffect(() => {
+    const s = session.current;
+    s.mounted = true;
+    if (!s.started) {
+      s.started = true;
+      logEvent({ e: "start", p: puzzle.id });
+    }
+    const quit = () => {
+      if (s.ended) return;
+      s.ended = true;
+      logEvent({ e: "quit", p: puzzle.id, ms: performance.now() - start.current, pct: s.best * 100 });
+    };
+    window.addEventListener("pagehide", quit);
+    return () => {
+      window.removeEventListener("pagehide", quit);
+      s.mounted = false;
+      // StrictMode remounts at once in development; only a real unmount counts as leaving
+      setTimeout(() => !s.mounted && quit(), 0);
+    };
+  }, [puzzle.id]);
+
   useEffect(() => {
     if (solvedIn !== null) return;
     const t = setInterval(() => setNow(performance.now() - start.current), 1000);
@@ -323,6 +347,7 @@ function PuzzlePlay({
       if (!guide) return;
       const { match, solved } = evaluate(pieces, guide);
       setMatch(match);
+      session.current.best = Math.max(session.current.best, match);
       if (solved) {
         // close the last little gaps: every piece clicks into its exact place (100% match)
         // ...and wherever it was built, the finished figure glides onto the outline
@@ -342,6 +367,10 @@ function PuzzlePlay({
         const ms = performance.now() - start.current;
         setSolvedIn(ms);
         onSolved(ms);
+        if (!session.current.ended) {
+          session.current.ended = true;
+          logEvent({ e: "solve", p: puzzle.id, ms });
+        }
         navigator.vibrate?.([30, 60, 30]);
       }
     },
@@ -493,11 +522,17 @@ export default function App() {
   const track = useCallback(
     (kind: "designsSaved" | "exports") => {
       updateProgress((p) => bump(p, kind));
+      const inPuzzle = mode === "puzzles" && puzzle;
+      logEvent(kind === "exports" ? { e: "export", ...(inPuzzle ? { p: puzzle.id } : {}) } : { e: "design_save" });
       // a saved design is worth keeping, so it creates the account like a solve does
       scheduleSync(kind === "designsSaved");
     },
-    [updateProgress],
+    [updateProgress, mode, puzzle],
   );
+
+  useEffect(() => {
+    if (mode === "free") logEvent({ e: "free_open" });
+  }, [mode]);
 
   const onSolved = useCallback(
     (ms: number) => {

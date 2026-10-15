@@ -17,6 +17,7 @@ npm test             # vitest run (all src/**/*.test.ts)
 npx vitest run -t "push physics"   # run a single describe/test by name
 npm run puzzles      # rebuild src/data/puzzles.json from scripts/figures.ts + write scripts/out/preview.png
 npm run deploy       # build + wrangler deploy: normally done by CI from main, see below
+npm run analytics    # gameplay report from production D1 (-- --days 7, -- --local)
 ```
 
 Vitest uses its own `vitest.config.ts` on purpose. Loading `vite.config.ts` pulls in the Cloudflare plugin, which fails under vitest with "There is already a server associated with the config".
@@ -239,3 +240,11 @@ Any arrangement whose shape matches the silhouette wins.
 - Per puzzle: synced solvers and the average best time (each time capped at `AVG_CAP_MS`, 10 min, so a forgotten tab doesn't skew it). Cards show "12 solved · avg 1:35".
 - Only puzzles with ≥ `MIN_SOLVERS` (5) are returned, so no single player's time can be read off a card.
 - Cached at the edge for `STATS_TTL` (5 min) with the Cache API; it is served before the rate limiter. Offline, cards just show nothing.
+
+**Gameplay analytics** (`src/analytics.ts`, `POST /api/event`, `scripts/analytics.ts`):
+- **Anonymous daily counters only:** each event bumps a row in `daily_events` keyed by (UTC day, event, puzzle). No player id, IP, device or cookie is stored, and nothing is sent when the browser has Do Not Track or Global Privacy Control on.
+- **Events** (`EVENTS`, validated by `validateEvent`): `start`, `solve` (with time), `quit` (time and best match %), `export`, `design_save`, `free_open`. Times are capped at an hour.
+- **Puzzle sessions** (`session` ref in `PuzzlePlay`): one `start`, then either a `solve` or a `quit`. A quit is leaving the puzzle unsolved or closing the page (`pagehide`). Unmount quits are deferred a tick so StrictMode's dev remount doesn't count.
+- Sent with `navigator.sendBeacon` (falls back to `fetch` with `keepalive`); failures are ignored.
+- **Visitors** (page views, referrers, countries, devices) come from Cloudflare Web Analytics: the cookie-free beacon at the end of `index.html` (its token is public). See the Cloudflare dashboard → Analytics & Logs → Web Analytics.
+- **Reading it:** `npm run analytics` prints totals, per-puzzle solve rate / average time / where people give up (hardest first), and a per-day table.

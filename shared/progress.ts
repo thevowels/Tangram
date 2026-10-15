@@ -150,6 +150,32 @@ export function validatePayload(x: unknown): SyncPayload | null {
   };
 }
 
+// ---- gameplay analytics: anonymous daily counters ----
+
+export const EVENTS = ["start", "solve", "quit", "export", "design_save", "free_open"] as const;
+export type EventName = (typeof EVENTS)[number];
+
+export interface GameEvent {
+  e: EventName;
+  /** puzzle id, for puzzle events */
+  p?: string;
+  /** time spent in ms (solve, quit) */
+  ms?: number;
+  /** best match reached, 0–100 (quit) */
+  pct?: number;
+}
+
+/** Returns a clean event, or null. Times are capped at an hour so one stray tab can't skew averages. */
+export function validateEvent(x: unknown): GameEvent | null {
+  if (!isObject(x) || !EVENTS.includes(x.e as EventName)) return null;
+  const e = x.e as EventName;
+  const p = typeof x.p === "string" && PUZZLE_ID.test(x.p) ? x.p : undefined;
+  if ((e === "start" || e === "solve" || e === "quit") && !p) return null;
+  const ms = typeof x.ms === "number" && x.ms >= 0 ? Math.min(Math.round(x.ms), 3_600_000) : undefined;
+  const pct = typeof x.pct === "number" && x.pct >= 0 ? Math.min(Math.round(x.pct), 100) : undefined;
+  return { e, ...(p ? { p } : {}), ...(ms !== undefined ? { ms } : {}), ...(pct !== undefined ? { pct } : {}) };
+}
+
 // ---- nicknames ----
 
 export const NICKNAME_MAX = 20;

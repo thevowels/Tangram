@@ -4,7 +4,9 @@ import {
   generateCode,
   mergePayload,
   normalizeCode,
+  validateEvent,
   validatePayload,
+  type GameEvent,
   type SyncDesign,
   type SyncPayload,
 } from "../shared/progress";
@@ -183,6 +185,17 @@ async function stats(env: Env): Promise<Response> {
   return res;
 }
 
+/** One anonymous event: bumps today's counter (UTC) for that event and puzzle. */
+async function recordEvent(env: Env, ev: GameEvent) {
+  await env.DB.prepare(
+    `INSERT INTO daily_events (day, event, puzzle_id, count, ms_sum, pct_sum) VALUES (?, ?, ?, 1, ?, ?)
+     ON CONFLICT (day, event, puzzle_id) DO UPDATE SET
+       count = count + 1, ms_sum = ms_sum + excluded.ms_sum, pct_sum = pct_sum + excluded.pct_sum`,
+  )
+    .bind(new Date().toISOString().slice(0, 10), ev.e, ev.p ?? "", ev.ms ?? 0, ev.pct ?? 0)
+    .run();
+}
+
 async function readBody(req: Request): Promise<unknown> {
   const text = await req.text();
   if (text.length > LIMITS.maxBodyBytes) return undefined;
@@ -199,6 +212,13 @@ async function api(req: Request, env: Env, path: string): Promise<Response> {
 
   const ip = clientIp(req);
   if (!(await env.API_LIMIT.limit({ key: ip })).success) return error(429, "Too many requests");
+
+  if (path === "/api/event" && req.method === "POST") {
+    const event = validateEvent(await readBody(req));
+    if (!event) return error(400, "Malformed event");
+    await recordEvent(env, event);
+    return new Response(null, { status: 204 });
+  }
 
   if (path === "/api/player" && req.method === "POST") {
     if (!(await env.CREATE_LIMIT.limit({ key: ip })).success) return error(429, "Too many requests");
