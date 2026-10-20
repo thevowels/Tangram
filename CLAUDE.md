@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 An interactive tangram player: React + TypeScript (Vite) deployed as a Cloudflare Worker with static assets. It has two modes:
 - **Free play:** arrange the 7 tans; save designs to localStorage; export PNG.
-- **Puzzles:** fill one of 50 hand-authored silhouettes (`scripts/figures.ts`). `tangram_asset.jpg` is the user's original inspiration sheet; it isn't used by the code.
+- **Puzzles:** fill one of 57 hand-authored silhouettes (`scripts/figures.ts`). `tangram_asset.jpg` is the user's original inspiration sheet; it isn't used by the code.
 
 ## Commands
 
@@ -139,6 +139,8 @@ Any arrangement whose shape matches the silhouette wins.
 - **Tests:** the `puzzles` tests check every stored solution covers its outline at >99%.
 - **Checking new figures:** always look at `scripts/out/preview.png` after adding one.
 - **Keep ids stable:** puzzle ids (`p01`…) come from array order, and saved progress (`tangram.solved`) is keyed by id. So add new figures **at the end** (`MORE_FIGURES`), never in the middle. Categories group them in the picker regardless of order.
+- **Categories:** each figure has one home `category` and optional `also` categories that list the *same* puzzle (same id, so progress, medals and badges are shared). `src/game/categories.ts` has `inCategory` and `categoriesOf` (Math first via `FIRST`, then home categories in order of first appearance, then also-only ones); the picker and the category badges use them.
+- **Math** holds the 13 convex shapes the tans can make (Wang & Hsiung, 1942: 1 triangle, 6 quadrilaterals, 2 pentagons, 4 hexagons). Six were already puzzles and are tagged `also: ["Math"]` (Square, Triangle, Rectangle, Parallelogram, Trapezoid, and Tent, the symmetric pentagon); Diamond is the Square turned, so Math lists only the Square. The other seven are `MATH_FIGURES`, found by an exhaustive search over 45° polygons of area 8 that the pieces tile. Tests check Math has 13 distinct convex shapes and that any convex puzzle added elsewhere is listed there too.
 - **Composition helpers:** `rot45` (turn a figure 45°) and `square2` (the two large triangles as a 2×2 square) join the sub-assemblies above.
 
 **Image export** (`src/exportImage.ts`, `exportBoardImage`):
@@ -162,7 +164,7 @@ Any arrangement whose shape matches the silhouette wins.
   - `loadProgress()` migrates the old `tangram.solved` (`{id: bestMs}`) once, with today as `first`.
   - Change it only via `recordSolve` / `bump`.
   - `App` holds it in `updateProgress` (with a ref, so a badge toast fires once even under StrictMode).
-- **Badges:** `computeBadges(progress, puzzles)` evaluates 12 pure rules: first solve, each category, all puzzles (the count is dynamic, so new puzzles raise the bar), speed, distinct days, design saved, picture exported.
+- **Badges:** `computeBadges(progress, puzzles)` evaluates 13 pure rules: first solve, each category (including Math, which counts puzzles listed there via `also`), all puzzles (the count is dynamic, so new puzzles raise the bar), speed, distinct days, design saved, picture exported.
   - `newlyEarned(before, after)` drives the unlock toast (`BadgeToast`). The header chip opens `BadgesSheet`.
   - Hints never name a specific puzzle.
   - The rules are pure, so the planned D1 backend can reuse them.
@@ -203,6 +205,7 @@ Any arrangement whose shape matches the silhouette wins.
   - `prefers-reduced-motion` drops the flakes.
 - **Medal** (`components/Medal.tsx`): a prize medal like 🥇: red and blue ribbon straps (piece colours) holding a metal disc with its place (1, 2, 3). On cards it hangs from the top edge and swings on hover. Its fills are inline so the picker's `.card svg` rules can't repaint it.
 - **Caption** (`.finish`): the medal, "Gold!", puzzle, time, a "new best" tag (against the `best` prop, captured at mount) and the buttons. It sits in the space the tray leaves free, measured from the drawn shadow: beside the figure in landscape, below it in portrait, never over it.
+- **Next puzzle** opens a random puzzle the player hasn't solved yet, never the current one (`randomNext` in `game/next.ts`); once everything is solved, any other puzzle.
 - SVG `filter: drop-shadow(...)` lengths on pieces are in board units, not screen px, so they are tiny values like `0.1px`.
 - **No spilling effects on resting pieces.** A drop shadow or outer glow on one piece paints over its neighbour along a shared edge, so two pieces meeting edge to edge look like one overlaps the other. So:
   - resting pieces have no shadow (only `.lifted`, while dragging);

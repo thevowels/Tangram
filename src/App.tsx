@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, typ
 import { Board } from "./components/Board";
 import { CelebrationLayer, RevealMedal } from "./components/Celebration";
 import { medal, MEDAL_NAME } from "./game/medals";
+import { randomNext } from "./game/next";
 import { Logo } from "./components/Logo";
 import { formatTime, PuzzlePicker } from "./components/PuzzlePicker";
 import { Toolbar } from "./components/Toolbar";
@@ -684,8 +685,7 @@ export default function App() {
 
   const next = () => {
     if (!puzzle) return;
-    const i = PUZZLES.findIndex((p) => p.id === puzzle.id);
-    setPuzzle(PUZZLES[(i + 1) % PUZZLES.length]);
+    setPuzzle(randomNext(PUZZLES, puzzle.id, progressRef.current.solved));
   };
 
   const playing = lesson || mode === "free" || puzzle !== null;

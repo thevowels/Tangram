@@ -11,9 +11,13 @@ export interface FigurePiece {
   pts: Poly;
 }
 
+export type Category = "Shapes" | "Things" | "Animals" | "People" | "Math";
+
 export interface Figure {
   name: string;
-  category: "Shapes" | "Things" | "Animals" | "People";
+  category: Category;
+  /** Further categories that list this same puzzle (same id), e.g. a convex shape under Math. */
+  also?: Category[];
   pieces: FigurePiece[];
 }
 
@@ -154,11 +158,13 @@ const BASE_FIGURES: Figure[] = [
   {
     name: "Square",
     category: "Shapes",
+    also: ["Math"],
     pieces: [raw("large", A, B, O), raw("large", A, O, D), ...classicSmall()],
   },
   {
     name: "Triangle",
     category: "Shapes",
+    also: ["Math"],
     pieces: (() => {
       const F: Vec = [4 * h, 8 * h];
       const X: Vec = [2 * h, 6 * h];
@@ -168,16 +174,19 @@ const BASE_FIGURES: Figure[] = [
   {
     name: "Rectangle",
     category: "Shapes",
+    also: ["Math"],
     pieces: [raw("large", [0, 0], [2, 0], [0, 2]), raw("large", [2, 0], [2, 2], [0, 2]), ...shift(smallSquare(), 2, 0)],
   },
   {
     name: "Parallelogram",
     category: "Shapes",
+    also: ["Math"],
     pieces: [raw("large", [2, 0], [2, 2], [0, 2]), raw("large", [4, 0], [6, 0], [4, 2]), ...shift(smallSquare(), 2, 0)],
   },
   {
     name: "Trapezoid",
     category: "Shapes",
+    also: ["Math"],
     pieces: [raw("large", [2, 0], [2, 2], [0, 2]), raw("large", [4, 0], [4, 2], [6, 2]), ...shift(smallSquare(), 2, 0)],
   },
 
@@ -383,7 +392,7 @@ const MORE_FIGURES: Figure[] = [
   // ---- Things ----
   { name: "Bow tie", category: "Things", pieces: turn(hourglass()) },
   { name: "Kite", category: "Things", pieces: kite() },
-  { name: "Tent", category: "Things", pieces: [...roof([2, 0]), ...shift(strip(), 0, 2)] },
+  { name: "Tent", category: "Things", also: ["Math"], pieces: [...roof([2, 0]), ...shift(strip(), 0, 2)] },
   {
     name: "Crown",
     category: "Things",
@@ -641,5 +650,103 @@ const MORE_FIGURES: Figure[] = [
   },
 ];
 
-export const FIGURES: Figure[] = [...BASE_FIGURES, ...MORE_FIGURES];
+// The 13 convex shapes the seven tans can make (Wang & Hsiung, 1942): 1 triangle, 6 quadrilaterals,
+// 2 pentagons and 4 hexagons. Six are puzzles already (Square, Triangle, Rectangle, Parallelogram,
+// Trapezoid and the Tent, the symmetric pentagon) and are listed under Math via `also`; these are the
+// other seven. Found by an exhaustive search over 45° polygons of area 8 that the pieces tile.
+const MATH_FIGURES: Figure[] = [
+  {
+    name: "Right trapezoid",
+    category: "Math",
+    pieces: [
+      raw("large", [2, 2], [2, 0], [0, 2]),
+      raw("large", [2, 2], [4, 2], [2, 0]),
+      raw("medium", [4, 0], [2, 0], [3, 1]),
+      raw("small", [4, 1], [3, 1], [4, 2]),
+      raw("parallelogram", [3, 1], [4, 1], [5, 0], [4, 0]),
+      raw("square", [4, 2], [5, 2], [5, 1], [4, 1]),
+      raw("small", [5, 1], [5, 0], [4, 1]),
+    ],
+  },
+  {
+    name: "Slant trapezoid",
+    category: "Math",
+    pieces: [
+      raw("large", [2, 3], [2, 1], [0, 3]),
+      raw("small", [2, 3], [3, 3], [2, 2]),
+      raw("medium", [3, 3], [3, 1], [2, 2]),
+      raw("parallelogram", [3, 0], [3, 1], [2, 2], [2, 1]),
+      raw("square", [3, 3], [4, 3], [4, 2], [3, 2]),
+      raw("large", [3, 2], [5, 2], [3, 0]),
+      raw("small", [4, 2], [4, 3], [5, 2]),
+    ],
+  },
+  {
+    name: "Slant pentagon",
+    category: "Math",
+    pieces: [
+      raw("large", [2, 3], [2, 1], [0, 3]),
+      raw("small", [2, 3], [3, 3], [2, 2]),
+      raw("medium", [3, 3], [3, 1], [2, 2]),
+      raw("parallelogram", [3, 0], [3, 1], [2, 2], [2, 1]),
+      raw("large", [3, 1], [3, 3], [5, 1]),
+      raw("square", [3, 1], [4, 1], [4, 0], [3, 0]),
+      raw("small", [4, 1], [5, 1], [4, 0]),
+    ],
+  },
+  {
+    name: "Hexagon",
+    category: "Math",
+    pieces: [
+      raw("medium", [1, 0], [1, 2], [0, 1]),
+      raw("large", [1, 0], [3, 0], [1, 2]),
+      raw("large", [3, 2], [1, 2], [3, 0]),
+      raw("square", [3, 0], [4, 0], [4, 1], [3, 1]),
+      raw("small", [3, 1], [4, 1], [3, 2]),
+      raw("parallelogram", [5, 1], [4, 1], [3, 2], [4, 2]),
+      raw("small", [4, 1], [4, 0], [5, 1]),
+    ],
+  },
+  {
+    name: "Shield",
+    category: "Math",
+    pieces: [
+      raw("large", [0, 0], [2, 0], [0, 2]),
+      raw("large", [2, 2], [0, 2], [2, 0]),
+      raw("medium", [0, 2], [2, 2], [1, 3]),
+      raw("small", [2, 3], [1, 3], [2, 2]),
+      raw("square", [2, 0], [3, 0], [3, 1], [2, 1]),
+      raw("small", [2, 1], [3, 1], [2, 2]),
+      raw("parallelogram", [3, 1], [3, 2], [2, 3], [2, 2]),
+    ],
+  },
+  {
+    name: "Diagonal hexagon",
+    category: "Math",
+    pieces: [
+      raw("large", [0, 0], [2, 0], [0, 2]),
+      raw("large", [2, 2], [0, 2], [2, 0]),
+      raw("medium", [0, 2], [2, 2], [1, 3]),
+      raw("small", [2, 3], [1, 3], [2, 2]),
+      raw("parallelogram", [3, 2], [3, 1], [2, 0], [2, 1]),
+      raw("small", [2, 2], [2, 1], [3, 2]),
+      raw("square", [2, 2], [3, 2], [3, 3], [2, 3]),
+    ],
+  },
+  {
+    name: "Slant hexagon",
+    category: "Math",
+    pieces: [
+      raw("large", [2, 0], [2, 2], [0, 0]),
+      raw("small", [0, 1], [0, 0], [1, 1]),
+      raw("parallelogram", [0, 1], [1, 1], [2, 2], [1, 2]),
+      raw("medium", [1, 2], [3, 2], [2, 3]),
+      raw("large", [2, 2], [2, 0], [4, 2]),
+      raw("small", [3, 3], [2, 3], [3, 2]),
+      raw("square", [3, 2], [4, 2], [4, 3], [3, 3]),
+    ],
+  },
+];
+
+export const FIGURES: Figure[] = [...BASE_FIGURES, ...MORE_FIGURES, ...MATH_FIGURES];
 

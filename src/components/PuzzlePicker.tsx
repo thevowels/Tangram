@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { bounds, toPath, type Poly } from "../geometry/polygon";
 import type { Puzzle } from "../game/check";
+import { categoriesOf, inCategory } from "../game/categories";
 import { medal, MEDAL_NAME } from "../game/medals";
 import { Medal } from "./Medal";
 
@@ -83,8 +84,8 @@ export function PuzzlePicker({ puzzles, solved, onPick, onHowTo }: Props) {
           </span>
         </div>
       </div>
-      {[...new Set(puzzles.map((p) => p.category))].map((category, ci) => {
-        const inCat = puzzles.filter((p) => p.category === category);
+      {categoriesOf(puzzles).map((category, ci) => {
+        const inCat = puzzles.filter((p) => inCategory(p, category));
         const doneInCat = inCat.filter((p) => p.id in solved).length;
         return (
         <section key={category} className="picker-section">
@@ -98,9 +99,7 @@ export function PuzzlePicker({ puzzles, solved, onPick, onHowTo }: Props) {
             </span>
           </h3>
           <div className="picker-grid">
-            {puzzles
-              .filter((p) => p.category === category)
-              .map((p, i) => (
+            {inCat.map((p, i) => (
                 <button
                   key={p.id}
                   className={"card" + (p.id in solved ? " done" : "")}
