@@ -8,6 +8,8 @@ import { flip, rotate, step45 } from "./game/actions";
 import { figureExtent, fitLayout, LANDSCAPE, placeSilhouette, PORTRAIT, remap, trayLayout } from "./game/layout";
 import puzzlesJson from "./data/puzzles.json";
 import { computeBadges, newlyEarned } from "./game/badges";
+import { categoriesOf, inCategory } from "./game/categories";
+import { randomNext } from "./game/next";
 import { medal, par } from "./game/medals";
 import { bump, migrateProgress, recordSolve, type Progress } from "./storage";
 
@@ -155,7 +157,43 @@ describe("snapping", () => {
 describe("puzzles", () => {
   it("are grouped into categories", () => {
     expect(puzzles.length).toBeGreaterThanOrEqual(20);
-    expect(new Set(puzzles.map((p) => p.category))).toEqual(new Set(["Shapes", "Things", "Animals", "People"]));
+    expect(categoriesOf(puzzles)).toEqual(["Math", "Shapes", "Things", "Animals", "People"]);
+  });
+
+  describe("Math: the 13 convex shapes", () => {
+    // convex hull with near-collinear points dropped (stored outlines keep T-junction vertices)
+    const hull = (pts: Poly): Poly => {
+      const s = [...pts].sort((a, b) => a[0] - b[0] || a[1] - b[1]);
+      const cross = (o: number[], a: number[], b: number[]) => (a[0] - o[0]) * (b[1] - o[1]) - (a[1] - o[1]) * (b[0] - o[0]);
+      const half = (list: Poly) => {
+        const out: Poly = [];
+        for (const p of list) {
+          while (out.length > 1 && cross(out[out.length - 2], out[out.length - 1], p) <= 1e-4) out.pop();
+          out.push(p);
+        }
+        return out.slice(0, -1);
+      };
+      return [...half(s), ...half([...s].reverse())];
+    };
+    const convex = (p: Puzzle) => Math.abs(area(hull((p.polygons as Poly[]).flat())) - 8) < 1e-3;
+    // edge lengths around the hull: equal for congruent shapes
+    const shape = (p: Puzzle) => {
+      const h = hull((p.polygons as Poly[]).flat());
+      return h.map((a, i) => Math.hypot(h[(i + 1) % h.length][0] - a[0], h[(i + 1) % h.length][1] - a[1]).toFixed(2)).sort().join(" ");
+    };
+    const math = puzzles.filter((p) => inCategory(p, "Math"));
+
+    it("lists 13 distinct convex shapes, each by a single id", () => {
+      expect(math).toHaveLength(13);
+      expect(math.every(convex)).toBe(true);
+      expect(new Set(math.map(shape)).size).toBe(13);
+      expect(new Set(puzzles.map((p) => p.id)).size).toBe(puzzles.length);
+    });
+
+    it("includes every convex puzzle found elsewhere (or one congruent to it)", () => {
+      const listed = new Set(math.map(shape));
+      for (const p of puzzles.filter(convex)) expect(listed.has(shape(p)), p.name).toBe(true);
+    });
   });
 
   for (const p of puzzles) {
@@ -581,6 +619,14 @@ describe("progress and badges", () => {
     expect(earned(p)).toContain("shapes");
   });
 
+  it("the Math badge counts puzzles listed there from other categories", () => {
+    const math = puzzles.filter((q) => inCategory(q, "Math"));
+    expect(math.some((q) => q.category !== "Math")).toBe(true);
+    let p = empty;
+    for (const q of math) p = recordSolve(p, q.id, 90_000);
+    expect(earned(p)).toContain("math");
+  });
+
   it("Grand Master tracks the current puzzle count (new puzzles raise the bar)", () => {
     let p = empty;
     for (const q of puzzles) p = recordSolve(p, q.id, 90_000);
@@ -623,5 +669,20 @@ describe("speed medals", () => {
     expect(medal(2 * t, p)).toBe("silver");
     expect(medal(2 * t + 1, p)).toBe("bronze");
     expect(medal(3_600_000, p)).toBe("bronze");
+  });
+});
+
+describe("next puzzle", () => {
+  const ps = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
+  const every = (current: string, solved: Record<string, unknown>) =>
+    new Set([0, 0.3, 0.6, 0.99].map((r) => randomNext(ps, current, solved, () => r).id));
+
+  it("picks at random among unsolved puzzles, never the current one", () => {
+    expect(every("a", { a: 1, c: 1 })).toEqual(new Set(["b", "d"]));
+    expect(every("b", {})).toEqual(new Set(["a", "c", "d"]));
+  });
+
+  it("falls back to any other puzzle once all are solved", () => {
+    expect(every("a", { a: 1, b: 1, c: 1, d: 1 })).toEqual(new Set(["b", "c", "d"]));
   });
 });

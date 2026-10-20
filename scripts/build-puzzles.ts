@@ -180,6 +180,7 @@ for (const [i, fig] of FIGURES.entries()) {
     id: "p" + String(i + 1).padStart(2, "0"),
     name: fig.name,
     category: fig.category,
+    ...(fig.also ? { also: fig.also } : {}),
     polygons: loops,
     solution,
   });

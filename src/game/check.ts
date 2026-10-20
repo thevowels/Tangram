@@ -14,6 +14,8 @@ export interface Puzzle {
   id: string;
   name: string;
   category: string;
+  /** Further categories that also list this puzzle (same id, so one record of progress). */
+  also?: string[];
   /** Silhouette loops (even-odd), centered on the origin, area 8. */
   polygons: Poly[];
   /** One arrangement of the 7 pieces that makes the silhouette (same coordinates). */

@@ -1,8 +1,8 @@
 import type { Progress } from "../storage";
+import { inCategory, type CategoryRef } from "./categories";
 
-interface PuzzleRef {
+interface PuzzleRef extends CategoryRef {
   id: string;
-  category: string;
 }
 
 export interface Badge {
@@ -22,7 +22,7 @@ type Rule = Omit<Badge, "earned" | "have" | "need"> & {
 };
 
 const solvedIn = (p: Progress, puzzles: PuzzleRef[], category: string): [number, number] => {
-  const inCat = puzzles.filter((q) => q.category === category);
+  const inCat = puzzles.filter((q) => inCategory(q, category));
   return [inCat.filter((q) => q.id in p.solved).length, inCat.length];
 };
 const times = (p: Progress) => Object.values(p.solved).map((r) => r.best);
@@ -34,6 +34,7 @@ const RULES: Rule[] = [
   { id: "things", emoji: "🛠️", title: "Handy", hint: "Solve every thing", count: (p, q) => solvedIn(p, q, "Things") },
   { id: "animals", emoji: "🦊", title: "Zookeeper", hint: "Solve every animal", count: (p, q) => solvedIn(p, q, "Animals") },
   { id: "people", emoji: "🧑", title: "People Person", hint: "Solve every person", count: (p, q) => solvedIn(p, q, "People") },
+  { id: "math", emoji: "📐", title: "Mathematician", hint: "Solve every convex shape in Math", count: (p, q) => solvedIn(p, q, "Math") },
   {
     id: "all",
     emoji: "👑",
